@@ -88,7 +88,7 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                                    tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                   sliderInput("one", "Select Mapping Year", value =NULL, min = NULL, max=NULL, step=NULL),
+                                                   sliderInput("one", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1),
                                                )))),
                                       tabPanel("County Profile View", tableOutput("table1"),
                                                fluidRow(column(8, wellPanel(
