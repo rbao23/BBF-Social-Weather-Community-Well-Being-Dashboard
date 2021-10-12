@@ -20,9 +20,9 @@ library(tidyverse)
 ################## Getting data from the database e#############################################
 
 # script to connect
-source("SocialWeatherDashboard_ruihab/code_base/dbconnect.R")
+source("code_base/dbconnect.R")
 # password env var
-source("SocialWeatherDashboard_ruihab/code_base/pgpass.R")
+source("code_base/pgpass.R")
 
 # create a connection to the postgresql database
 # note that "con" will be used later in each connection to the database
@@ -53,20 +53,12 @@ social_index_dataset <- social_index_dataset %>%
 
 social_index_dataset$race[social_index_dataset$race=='Total']  <- "All" 
 social_index_dataset$race[social_index_dataset$race=='Aapi']  <- "Asian Americans and Pacific Islanders"
-social_index_dataset <- social_index_dataset %>%
-    mutate(subdomain = replace(subdomain,is.na(subdomain),"N/A"))
+social_index_dataset$subdomain[social_index_dataset$subdomain=='/N']  <- "N/A"
+
 # disconnect database
 dbDisconnect(con) 
-#tbl_geography = dbGetQuery(con, "SELECT * from shiny.tbl_geography")
-#tbl_social_weather_dataset = dbGetQuery(con, "SELECT * from shiny.dtbl_social_weather_dataset")
-#tbl_age = dbGetQuery(con, "SELECT * from shiny.tbl_age")
-#tbl_life_expectancy = dbGetQuery(con, "SELECT * from shiny.tbl_life_expectancy")
-#tbl_population = dbGetQuery(con, "SELECT * from shiny.tbl_population")
-#tbl_race = dbGetQuery(con, "SELECT * from shiny.race")
-#dbWriteTable(con, "mtcars", tbl_dataset_info)
-#tbl_dataset_info <- dbGetQuery(con,tbl_dataset_info)
 
-###################### Creating filter variables for the sidebar panels #########################
+############################################### ui.R ##################################################
 
 body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                  title = "Social Weather Community Well-Being Dashboard",
@@ -83,13 +75,16 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                               ),
                               mainPanel(
                                   tabsetPanel(
-                                      tabPanel("State Profile View", verbatimTextOutput("summary"),
-                                               fluidRow(column(8, wellPanel(
-                                                   tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
+                                      tabPanel("US Map View", verbatimTextOutput("mapview"),
+                                               fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                   sliderInput("one", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1),
+                                                                             sliderInput("one", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,animate=TRUE,ticks=TRUE),
+                                                                             leafletOutput("mymap"),
+                                                                             p(),
+                                                                             actionButton("recalc", "New points")
                                                )))),
+                                      tabPanel("State Profile View", verbatimTextOutput("summary")),
                                       tabPanel("County Profile View", tableOutput("table1"),
                                                fluidRow(column(8, wellPanel(
                                                    tags$style(HTML(".js-irs-1 .irs-single, .js-irs-1 .irs-bar-edge, .js-irs-1 .irs-bar{
@@ -116,8 +111,11 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                  tabPanel("About this site",h2("About Social Weather Index"))
 )
 
+############################################### server.R ##################################################
+
 # Define server logic required to draw a histogram
 server <- function(input,output,session) {
+    #reactive selectinput
     domain <- reactive({
         print("event domain")
         req(input$domain)
@@ -174,11 +172,21 @@ server <- function(input,output,session) {
         req(input$year)
         filter(age(), year == input$year)
     })
-    
-    observe({
-        val <- year()$year
-        updateSliderInput(session, "one", value = val,
+    # reactive sliderinput
+    observeEvent(year(),{
+        updateSliderInput(session, "one", value = input()$year,
                           min = min(age()$year), max = max(age()$year), step = 1)
+    })
+    
+    # Reactive expression to create data frame of all input values ----
+    points <- eventReactive(input$recalc, {
+      cbind(rnorm(40) * 2 + 13, rnorm(40) + 48)
+    }, ignoreNULL = FALSE)
+    
+    output$mymap <- renderLeaflet({
+      leaflet() %>%
+        addTiles() %>%
+        setView(lng = -93.85, lat = 37.45, zoom = 4)
     })
     
     
