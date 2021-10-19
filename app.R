@@ -8,13 +8,17 @@
 #
 
 # load libaries
-#library(shiny)
+library(shiny)
 library(shinythemes)
 library(dplyr)
 library(RPostgreSQL)
 library(magrittr)
 library(tidyverse)
 library(leaflet)
+library(tigris)
+library(sf)
+library(classInt)
+library(RColorBrewer)
 
 #library(shinydashboard)
 
@@ -33,8 +37,9 @@ dbListTables(conn = con)
 
 
 # get the required tables from the sql database 
-social_index_dataset = dbGetQuery(con, "SELECT * from public.tbl_dataset_info
-                                        inner JOIN public.tbl_social_weather_dataset using(dataset_id)")
+social_index_dataset = dbGetQuery(con, "SELECT * from public.tbl_social_weather_dataset 
+                                        LEFT JOIN public.tbl_dataset_info using(dataset_id)
+                                        LEFT JOIN public.tbl_geography using(geo_id)")
 
 # dataframe wrangling
 social_index_dataset<-social_index_dataset %>% mutate(sex = case_when(startsWith(social_index_dataset$variable,"Female") ~ "Female", 
@@ -53,10 +58,25 @@ social_index_dataset <- social_index_dataset %>%
 
 social_index_dataset$race[social_index_dataset$race=='Total']  <- "All" 
 social_index_dataset$race[social_index_dataset$race=='Aapi']  <- "Asian Americans and Pacific Islanders"
-social_index_dataset$subdomain[social_index_dataset$subdomain=='/N']  <- "N/A"
+social_index_dataset$subdomain <- ifelse(is.na(social_index_dataset$subdomain), 'N/A', social_index_dataset$subdomain)
+social_index_dataset$value[is.na(social_index_dataset$value)] <- 0 
 
 # disconnect database
 dbDisconnect(con) 
+
+##############################shape file##############################
+# get tract shapefile
+wa_tracts <-tracts(state = "WA", county = c('King', 'Pierce','Yakima'))
+md_tracts <-tracts(state = 'MD', county = c('Baltimore county', 'Baltimore city','Prince George','Montgomery'))
+test_tracts = union(wa_tracts,md_tracts)
+# get county shapefile
+wa_counties <- counties(state = 'WA', cb = TRUE, resolution = '20m')
+md_counties <- counties(state = 'MD', cb = TRUE, resolution = '20m')
+test_counties <- union(wa_counties[,c("GEOID","geometry")],md_counties[,c("GEOID","geometry")])
+#get state shapefile
+allstates <- states(cb=TRUE)
+test_area <- bind_rows(test_tracts,test_counties,allstates)
+
 
 ############################################### ui.R ##################################################
 
@@ -71,17 +91,22 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                               selectInput("sex", "Sex:",choices=NULL),
                               selectInput("race", "Race:",choices=NULL),
                               selectInput("age", "Age:",choices=NULL),
-                              selectInput("year", "Year:",choices=NULL)
-                            ),
+                              selectInput("year", "Year:",choices=NULL),
+                              selectInput("geo_level", "Geographic Level:",choices=NULL)
+                              ),
                             mainPanel(
                               tabsetPanel(
                                 tabPanel("US Map View", verbatimTextOutput("mapview"),
                                          fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                       sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,round = TRUE, animate=TRUE),
-                                                                       leafletOutput("mymap"),
-                                                                       h6("Welcome to the Social Weather Map! Use the left panel to filter data, and click on the map for additional details. Please note that data are not currently available for every county in every year, and estimates will change as we process more data.")
+                                                                       sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1, animate=TRUE),
+                                                                       fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "50vh")))), 
+                                                                       fluidRow(column(width = 12, " ", style='padding:3px;')),
+                                                                       fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
+                                                  and click on the map for additional details. Please note that data are not currently
+                                                  available for every county in every year, and estimates will change as we process more data.", 
+                                                                                       style='font-family:Avenir, Helvetica;font-size:16;text-align:center')),
                                          )))),
                                 tabPanel("State Profile View", verbatimTextOutput("stateview")),
                                 tabPanel("County Profile View", tableOutput("countyview"),
@@ -114,7 +139,7 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic required to draw a histogram
 server <- function(input,output,session) {
 #reactive selectinput
-domain <- reactive({
+  domain <- reactive({
     print("event domain")
     req(input$domain)
     filter(social_index_dataset, domain == input$domain)
@@ -170,21 +195,72 @@ domain <- reactive({
     req(input$year)
     filter(age(), year == input$year)
   })
+  
   # reactive sliderinput
   observeEvent(year(),{
+    print("event slider")
     updateSliderInput(session, "yearslider", value = input$year,
                       min = min(age()$year), max = max(age()$year), step = 1)
   })
   
-  # Reactive expression to create data frame of all input values ----
-  
-  output$mymap <- renderLeaflet({
-    leaflet() %>%
-      addProviderTiles(provider = "CartoDB") %>% 
-      setView(lng = -93.85, lat = 37.45, zoom = 4)
+  geo_level <- reactive({
+    req(input$year)
+    filter(year(), geo_level == input$geo_level)
   })
+  
+  observeEvent(geo_level(), {
+    print("event geolevel")
+    updateSelectInput(session,inputId = "geo_level", choices = sort(unique(year()$geo_level)))
+  })
+  
+  filtered_data <- reactive({
+    social_index_dataset %>%
+      filter(domain %in% input$domain,
+             subdomain %in% input$subdomain,
+             indicator %in% input$indicator,
+             sex %in% input$sex,
+             race %in% input$race,
+             age %in% input$age,
+             geo_level %in% input$geo_level,
+             race %in% input$race,
+             year %in% input$year)
+  })
+  
+  observeEvent(filtered_data(),{
+       #join dataset and shapefile
+      f_data <- filtered_data()
+      
+      f_data$geo_id <- substr(f_data$geo_id,3,nchar(f_data$geo_id))
 
-
+      names(f_data)[1] <- 'GEOID'
+      mapdata_merged <- dplyr::left_join(f_data,test_area[,c("GEOID","geometry")], "GEOID", "GEOID")%>% drop_na("geometry")
+      # transfer to spatial dataset
+      mapdata_merged_sf <-st_as_sf(mapdata_merged)
+    
+      pal_fun <- colorNumeric("YlOrRd", NULL, n =7)
+      p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variable),"<br/>",
+                        "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
+                        "<strong> Total estimate </strong>", unique(mapdata_merged_sf$value))
+      #breaks_qt <- classIntervals(c(min(as.numeric(mapdata_merged_sf$value)), as.numeric(mapdata_merged_sf$value)), n = 7, style = "quantile")
+      
+      
+      output$mymap <- renderLeaflet({
+        leaflet(mapdata_merged_sf) %>%
+          addProviderTiles(provider = "CartoDB") %>% 
+          addPolygons(
+            stroke = FALSE,
+            fillColor = ~pal_fun(as.numeric(value)), # set fill color with function from above and value
+            fillOpacity = 0.5, 
+            smoothFactor = 0.2,
+            popup = p_popup) %>% 
+          addLegend("bottomright",  # location
+                    pal = pal_fun,     # palette function
+                    values = ~as.numeric(value),
+                    title = unique(mapdata_merged_sf$variable)) %>% # legend title 
+          setView(lng = -121.2, lat = 47.2, zoom = 6)
+          })
+    })
 }
 
 shinyApp(body, server)
+
