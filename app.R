@@ -257,7 +257,7 @@ server <- function(input,output,session) {
                     pal = pal_fun,     # palette function
                     values = ~as.numeric(value),
                     title = unique(mapdata_merged_sf$variable)) %>% # legend title 
-          setView(lng = -121.2, lat = 47.2, zoom = 6)
+          setView(lng = -119.5, lat = 47.2, zoom = 6)
           })
     })
 }
