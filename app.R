@@ -16,6 +16,7 @@ library(magrittr)
 library(tidyverse)
 library(leaflet)
 library(tigris)
+options(tigris_use_cache = TRUE)
 library(sf)
 library(classInt)
 library(RColorBrewer)
@@ -44,22 +45,37 @@ social_index_dataset = dbGetQuery(con, "SELECT * from public.tbl_social_weather_
 # dataframe wrangling
 social_index_dataset<-social_index_dataset %>% mutate(sex = case_when(startsWith(social_index_dataset$variable,"Female") ~ "Female", 
                                                                       startsWith(social_index_dataset$variable,"Male")   ~ "Male", TRUE ~ "All"))
+# add age column
 social_index_dataset <- social_index_dataset %>%
-    mutate(age = case_when(
-        (social_index_dataset$dataset_id == 12 &(endsWith(social_index_dataset$variable, "years_percent insured estimate") | endsWith(social_index_dataset$variable,"older_percent insured estimate")))  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-25),TRUE ~ 'All'))
+  mutate(age = case_when(
+    (social_index_dataset$dataset_id == 12 &(endsWith(social_index_dataset$variable, "years_percent insured estimate") | endsWith(social_index_dataset$variable,"older_percent insured estimate")))  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-25),TRUE ~ 'All'))
 
+# add race column
 social_index_dataset <- social_index_dataset %>%
-    mutate(race = case_when(
-        (social_index_dataset$dataset_id == 8 & social_index_dataset$sex == 'All' & endsWith(social_index_dataset$variable,"prison_pop_rate"))  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-16),
-        (social_index_dataset$dataset_id == 8 & social_index_dataset$sex == 'All' & endsWith(social_index_dataset$variable,"jail_pop_rate"))  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-14),
-        (social_index_dataset$dataset_id == 11 & social_index_dataset$sex == 'All')  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-15),
-        (social_index_dataset$dataset_id == 12 & social_index_dataset$sex == 'All'& social_index_dataset$age == 'All')  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-25),
-        (social_index_dataset$dataset_id == 15 & social_index_dataset$sex == 'All')  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-14),TRUE ~ 'All'))
+  mutate(race = case_when(
+    (social_index_dataset$dataset_id == 8 & social_index_dataset$sex == 'All' & endsWith(social_index_dataset$variable,"prison_pop_rate"))  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-16),
+    (social_index_dataset$dataset_id == 8 & social_index_dataset$sex == 'All' & endsWith(social_index_dataset$variable,"jail_pop_rate"))  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-14),
+    (social_index_dataset$dataset_id == 11 & social_index_dataset$sex == 'All')  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-15),
+    (social_index_dataset$dataset_id == 12 & social_index_dataset$sex == 'All'& social_index_dataset$age == 'All')  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-25),
+    (social_index_dataset$dataset_id == 15 & social_index_dataset$sex == 'All')  ~ substr(social_index_dataset$variable, 1, nchar(social_index_dataset$variable)-14),TRUE ~ 'All'))
+
+# change variable column
+social_index_dataset <- social_index_dataset %>%
+  mutate(variable = case_when(
+    (social_index_dataset$dataset_id == 8 & endsWith(social_index_dataset$variable,"prison_pop_rate"))  ~ "Prison Population Rate",
+    (social_index_dataset$dataset_id == 8 & endsWith(social_index_dataset$variable,"jail_pop_rate"))  ~ "Jail Population Rate",
+    (social_index_dataset$dataset_id == 11)  ~  "Native Analysis Value",
+    (social_index_dataset$dataset_id == 12)  ~"Percent Insured Estimate",
+    (social_index_dataset$dataset_id == 15)  ~"Percent Voted",
+    TRUE ~social_index_dataset$variable))
 
 social_index_dataset$race[social_index_dataset$race=='Total']  <- "All" 
 social_index_dataset$race[social_index_dataset$race=='Aapi']  <- "Asian Americans and Pacific Islanders"
 social_index_dataset$subdomain <- ifelse(is.na(social_index_dataset$subdomain), 'N/A', social_index_dataset$subdomain)
-social_index_dataset$value[is.na(social_index_dataset$value)] <- 0 
+social_index_dataset$value[is.na(social_index_dataset$value)] <- 'NA'
+social_index_dataset <- social_index_dataset %>%
+  mutate(value = case_when(endsWith(social_index_dataset$value,"%") ~substr(social_index_dataset$value,0,nchar(social_index_dataset$value)-1),TRUE ~social_index_dataset$value))
+
 
 # disconnect database
 dbDisconnect(con) 
@@ -70,12 +86,17 @@ wa_tracts <-tracts(state = "WA", county = c('King', 'Pierce','Yakima'))
 md_tracts <-tracts(state = 'MD', county = c('Baltimore county', 'Baltimore city','Prince George','Montgomery'))
 test_tracts = union(wa_tracts,md_tracts)
 # get county shapefile
-wa_counties <- counties(state = 'WA', cb = TRUE, resolution = '20m')
-md_counties <- counties(state = 'MD', cb = TRUE, resolution = '20m')
+wa_counties <- counties(state = 'WA')
+md_counties <- counties(state = 'MD')
 test_counties <- union(wa_counties[,c("GEOID","geometry")],md_counties[,c("GEOID","geometry")])
 #get state shapefile
-allstates <- states(cb=TRUE)
-test_area <- bind_rows(test_tracts,test_counties,allstates)
+test_states <- filter(states(),STUSPS == 'WA' | STUSPS == 'MD')
+# get zcta shapefile
+test_zcta<-zctas(starts_with = c("98", "99","20","21"))
+test_area <- bind_rows(test_tracts,test_counties,test_states)
+
+names(test_zcta)[1] <- 'GEOID'
+test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")])
 
 
 ############################################### ui.R ##################################################
@@ -88,20 +109,21 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                               selectInput("domain","Domain:",choices=sort(unique(social_index_dataset$domain))),
                               selectInput("subdomain", "Subdomain:", choices=NULL),
                               selectInput("indicator", "Indicator:", choices=NULL),
+                              selectInput("variable_name", "Variable:", choices=NULL),
                               selectInput("sex", "Sex:",choices=NULL),
                               selectInput("race", "Race:",choices=NULL),
                               selectInput("age", "Age:",choices=NULL),
                               selectInput("year", "Year:",choices=NULL),
                               selectInput("geo_level", "Geographic Level:",choices=NULL)
-                              ),
+                            ),
                             mainPanel(
                               tabsetPanel(
-                                tabPanel("US Map View", verbatimTextOutput("mapview"),
+                                tabPanel("Map View", verbatimTextOutput("mapview"),
                                          fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
                                                                        sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1, animate=TRUE),
-                                                                       fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "50vh")))), 
+                                                                       fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "55vh")))), 
                                                                        fluidRow(column(width = 12, " ", style='padding:3px;')),
                                                                        fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
                                                   and click on the map for additional details. Please note that data are not currently
@@ -138,7 +160,7 @@ body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 
 # Define server logic required to draw a histogram
 server <- function(input,output,session) {
-#reactive selectinput
+  #reactive selectinput
   domain <- reactive({
     print("event domain")
     req(input$domain)
@@ -161,12 +183,21 @@ server <- function(input,output,session) {
     filter(subdomain(), indicator == input$indicator)
   })
   observeEvent(indicator(), {
+    print("event variable")
+    updateSelectInput(session,inputId = "variable_name", choices = sort(unique(indicator()$variable)))
+  })
+  variable_name <- reactive({
+    req(input$variable_name)
+    filter(indicator(), variable == input$variable_name)
+  })
+  
+  observeEvent(variable_name(), {
     print("event sex")
-    updateSelectInput(session,inputId = "sex", choices = sort(unique(indicator()$sex)))
+    updateSelectInput(session,inputId = "sex", choices = sort(unique(variable_name()$sex)))
   })
   sex <- reactive({
     req(input$sex)
-    filter(indicator(), sex == input$sex)
+    filter(variable_name(), sex == input$sex)
   })
   observeEvent(sex(), {
     print("event race")
@@ -200,67 +231,58 @@ server <- function(input,output,session) {
   observeEvent(year(),{
     print("event slider")
     updateSliderInput(session, "yearslider", value = input$year,
-                      min = min(age()$year), max = max(age()$year), step = 1)
+                      min = min(as.numeric(age()$year)), max = max(as.numeric(age()$year)), step = 1)
+  })
+  yearslider <- reactive({
+    req(input$yearslider)
+    filter(age(), yearslider == input$yearslider)
   })
   
-  geo_level <- reactive({
-    req(input$year)
-    filter(year(), geo_level == input$geo_level)
-  })
-  
-  observeEvent(geo_level(), {
-    print("event geolevel")
+  observeEvent(year(), {
+    print("event geo_level")
+    print(year())
     updateSelectInput(session,inputId = "geo_level", choices = sort(unique(year()$geo_level)))
   })
   
   filtered_data <- reactive({
-    social_index_dataset %>%
-      filter(domain %in% input$domain,
-             subdomain %in% input$subdomain,
-             indicator %in% input$indicator,
-             sex %in% input$sex,
-             race %in% input$race,
-             age %in% input$age,
-             geo_level %in% input$geo_level,
-             race %in% input$race,
-             year %in% input$year)
+    req(input$year)
+    filter(year(), geo_level == input$geo_level)
   })
-  
-  observeEvent(filtered_data(),{
-       #join dataset and shapefile
-      f_data <- filtered_data()
-      
-      f_data$geo_id <- substr(f_data$geo_id,3,nchar(f_data$geo_id))
 
-      names(f_data)[1] <- 'GEOID'
-      mapdata_merged <- dplyr::left_join(f_data,test_area[,c("GEOID","geometry")], "GEOID", "GEOID")%>% drop_na("geometry")
-      # transfer to spatial dataset
-      mapdata_merged_sf <-st_as_sf(mapdata_merged)
+  observeEvent(filtered_data(),{
+    #join dataset and shapefile
+    f_data <- filtered_data()
+    print("bug0")
+    f_data$geo_id = as.character(ifelse((f_data$geo_level) %in% c("State","County","Tract"), substr(f_data$geo_id,3,nchar(f_data$geo_id)), substr(f_data$geo_id,7,11)))
+    names(f_data)[1] <- 'GEOID'
+    print("bug1")
+    mapdata_merged <- dplyr::left_join(f_data,test[,c("GEOID","geometry")], "GEOID", "GEOID")
+    # transfer to spatial dataset
+    print("bug2")
+    mapdata_merged_sf <-st_as_sf(mapdata_merged)
+    print(mapdata_merged_sf)
+    pal_fun <- colorNumeric("YlOrRd", NULL, n =7)
+    p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variable),"<br/>",
+                      "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
+                      "<strong> Total estimate </strong>", unique(mapdata_merged_sf$value))
+    #breaks_qt <- classIntervals(c(min(as.numeric(mapdata_merged_sf$value)), as.numeric(mapdata_merged_sf$value)), n = 7, style = "quantile")
     
-      pal_fun <- colorNumeric("YlOrRd", NULL, n =7)
-      p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variable),"<br/>",
-                        "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
-                        "<strong> Total estimate </strong>", unique(mapdata_merged_sf$value))
-      #breaks_qt <- classIntervals(c(min(as.numeric(mapdata_merged_sf$value)), as.numeric(mapdata_merged_sf$value)), n = 7, style = "quantile")
-      
-      
-      output$mymap <- renderLeaflet({
-        leaflet(mapdata_merged_sf) %>%
-          addProviderTiles(provider = "CartoDB") %>% 
-          addPolygons(
-            stroke = FALSE,
-            fillColor = ~pal_fun(as.numeric(value)), # set fill color with function from above and value
-            fillOpacity = 0.5, 
-            smoothFactor = 0.2,
-            popup = p_popup) %>% 
-          addLegend("bottomright",  # location
-                    pal = pal_fun,     # palette function
-                    values = ~as.numeric(value),
-                    title = unique(mapdata_merged_sf$variable)) %>% # legend title 
-          setView(lng = -119.5, lat = 47.2, zoom = 6)
-          })
+    output$mymap <- renderLeaflet({
+      leaflet(mapdata_merged_sf) %>%
+        addProviderTiles(provider = "CartoDB") %>% 
+        addPolygons(
+          stroke = FALSE,
+          fillColor = ~pal_fun(as.numeric(value)), # set fill color with function from above and value
+          fillOpacity = 0.5, 
+          smoothFactor = 0.2,
+          popup = p_popup) %>% 
+        addLegend("bottomright",  # location
+                  pal = pal_fun,     # palette function
+                  values = ~as.numeric(value),
+                  title = unique(mapdata_merged_sf$variable)) %>% # legend title 
+        setView(lng = -94, lat = 38.82, zoom = 4)
     })
+  })
 }
 
 shinyApp(body, server)
-
