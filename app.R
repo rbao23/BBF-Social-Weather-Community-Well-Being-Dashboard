@@ -7,6 +7,7 @@
 #    http://shiny.rstudio.com/
 #
 
+
 # load libaries
 library(shiny)
 library(shinythemes)
@@ -22,6 +23,7 @@ library(classInt)
 library(RColorBrewer)
 
 #library(shinydashboard)
+suppressWarnings(expr)
 
 ################## Getting data from the database e#############################################
 
@@ -42,6 +44,13 @@ social_index_dataset = dbGetQuery(con, "SELECT * from public.tbl_social_weather_
                                         LEFT JOIN public.tbl_dataset_info using(dataset_id)
                                         LEFT JOIN public.tbl_geography using(geo_id)")
 
+
+
+
+
+# disconnect database
+dbDisconnect(con) 
+
 # dataframe wrangling
 social_index_dataset<-social_index_dataset %>% mutate(sex = case_when(startsWith(social_index_dataset$variable,"Female") ~ "Female", 
                                                                       startsWith(social_index_dataset$variable,"Male")   ~ "Male", TRUE ~ "All"))
@@ -61,7 +70,7 @@ social_index_dataset <- social_index_dataset %>%
 
 # change variable column
 social_index_dataset <- social_index_dataset %>%
-  mutate(variable = case_when(
+  mutate(variables = case_when(
     (social_index_dataset$dataset_id == 8 & endsWith(social_index_dataset$variable,"prison_pop_rate"))  ~ "Prison Population Rate",
     (social_index_dataset$dataset_id == 8 & endsWith(social_index_dataset$variable,"jail_pop_rate"))  ~ "Jail Population Rate",
     (social_index_dataset$dataset_id == 11)  ~  "Native Analysis Value",
@@ -76,9 +85,31 @@ social_index_dataset$value[is.na(social_index_dataset$value)] <- 'NA'
 social_index_dataset <- social_index_dataset %>%
   mutate(value = case_when(endsWith(social_index_dataset$value,"%") ~substr(social_index_dataset$value,0,nchar(social_index_dataset$value)-1),TRUE ~social_index_dataset$value))
 
+# clean up non numeric values
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE20']  <- "10"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='PS']  <- "60"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE5']  <- "2.5"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='GE95']  <- "97.5"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LT50']  <- "25"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='GE50']  <- "75"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE10']  <- "5"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='GE90']  <- "95"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='GE80']  <- "90"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='GE99']  <- "99.5"
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE1']  <- "0.5"
 
-# disconnect database
-dbDisconnect(con) 
+social_index_dataset$value <- apply(social_index_dataset[c("dataset_id", "value")], 1, function(df) {
+  if (as.numeric(df["dataset_id"]) == 4 & is.na(as.numeric(df["value"]))) {
+    splitted = strsplit(df["value"],"-")
+    toString((as.numeric(splitted[[1]][2]) + as.numeric(splitted[[1]][1]) /2))
+  } else {
+    df["value"]
+  }
+})
+
+social_index_dataset$value[social_index_dataset$dataset_id == 4 & is.na(as.numeric(social_index_dataset$value))] <- toString((as.numeric(strsplit(social_index_dataset$value,"-")[[1]][2]) + as.numeric(strsplit(social_index_dataset$value,"-")[[1]][1]))/2)
+
+
 
 ##############################shape file##############################
 # get tract shapefile
@@ -101,187 +132,244 @@ test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")]
 
 ############################################### ui.R ##################################################
 
-body<-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
-                 title = "Social Weather Community Well-Being Dashboard",
-                 tabPanel("Comparion Map",h2("Select Dataset"),
-                          sidebarLayout(
-                            sidebarPanel(
-                              selectInput("domain","Domain:",choices=sort(unique(social_index_dataset$domain))),
-                              selectInput("subdomain", "Subdomain:", choices=NULL),
-                              selectInput("indicator", "Indicator:", choices=NULL),
-                              selectInput("variable_name", "Variable:", choices=NULL),
-                              selectInput("sex", "Sex:",choices=NULL),
-                              selectInput("race", "Race:",choices=NULL),
-                              selectInput("age", "Age:",choices=NULL),
-                              selectInput("year", "Year:",choices=NULL),
-                              selectInput("geo_level", "Geographic Level:",choices=NULL)
-                            ),
-                            mainPanel(
-                              tabsetPanel(
-                                tabPanel("Map View", verbatimTextOutput("mapview"),
-                                         fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
+body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
+                  title = "Social Weather Community Well-Being Dashboard",
+                  tabPanel("Comparion Map",h2("Select Dataset"),
+                           sidebarLayout(
+                             sidebarPanel(
+                               selectInput("domain","Domain:",choices=sort(unique(social_index_dataset$domain)),selected = NULL),
+                               selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
+                               selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
+                               selectInput("variable_name", "Variable:", choices=NULL,selected = NULL),
+                               selectInput("sex", "Sex:",choices=NULL,selected = NULL),
+                               selectInput("race", "Race:",choices=NULL),
+                               selectInput("age", "Age:",choices=NULL),
+                               selectInput("geo_level", "Geographic Level:",choices=NULL),
+                               selectInput("year", "Year:",choices=NULL)
+                             ),
+                             mainPanel(
+                               tabsetPanel(
+                                 tabPanel("Map View", verbatimTextOutput("mapview"),
+                                          fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                       sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1, animate=TRUE),
-                                                                       fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "55vh")))), 
-                                                                       fluidRow(column(width = 12, " ", style='padding:3px;')),
-                                                                       fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
+                                                                        sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
+                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "55vh")))), 
+                                                                        fluidRow(column(width = 12, " ", style='padding:3px;')),
+                                                                        fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
                                                   and click on the map for additional details. Please note that data are not currently
                                                   available for every county in every year, and estimates will change as we process more data.", 
-                                                                                       style='font-family:Avenir, Helvetica;font-size:16;text-align:center')),
-                                         )))),
-                                tabPanel("State Profile View", verbatimTextOutput("stateview")),
-                                tabPanel("County Profile View", tableOutput("countyview"),
-                                         fluidRow(column(8, wellPanel(
-                                           tags$style(HTML(".js-irs-1 .irs-single, .js-irs-1 .irs-bar-edge, .js-irs-1 .irs-bar{
+                                                                                        style='font-family:Avenir, Helvetica;font-size:16;text-align:center')),
+                                          )))),
+                                 tabPanel("State Profile View", verbatimTextOutput("stateview")),
+                                 tabPanel("County Profile View", tableOutput("countyview"),
+                                          fluidRow(column(8, wellPanel(
+                                            tags$style(HTML(".js-irs-1 .irs-single, .js-irs-1 .irs-bar-edge, .js-irs-1 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                           sliderInput("countyview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
-                                         )))),
-                                tabPanel("Tract Profile View", tableOutput("tractview"),
-                                         fluidRow(column(8, wellPanel(
-                                           tags$style(HTML(".js-irs-2 .irs-single, .js-irs-2 .irs-bar-edge, .js-irs-2 .irs-bar{
+                                            sliderInput("countyview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
+                                          )))),
+                                 tabPanel("Tract Profile View", tableOutput("tractview"),
+                                          fluidRow(column(8, wellPanel(
+                                            tags$style(HTML(".js-irs-2 .irs-single, .js-irs-2 .irs-bar-edge, .js-irs-2 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                           sliderInput("tractview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
-                                         )))),
-                                tabPanel("Zip Code Profile View", tableOutput("zctaview"),
-                                         fluidRow(column(8, wellPanel(
-                                           tags$style(HTML(".js-irs-3 .irs-single, .js-irs-3 .irs-bar-edge, .js-irs-3 .irs-bar{
+                                            sliderInput("tractview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
+                                          )))),
+                                 tabPanel("Zip Code Profile View", tableOutput("zctaview"),
+                                          fluidRow(column(8, wellPanel(
+                                            tags$style(HTML(".js-irs-3 .irs-single, .js-irs-3 .irs-bar-edge, .js-irs-3 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                           sliderInput("zctaview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
-                                         ))))
-                              )))), 
-                 tabPanel("About this site",h2("About Social Weather Index"))
+                                            sliderInput("zctaview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
+                                          ))))
+                               )))), 
+                  tabPanel("About this site",h2("About Social Weather Index"))
 )
 
 ############################################### server.R ##################################################
 
 # Define server logic required to draw a histogram
 server <- function(input,output,session) {
-  #reactive selectinput
   domain <- reactive({
-    print("event domain")
-    req(input$domain)
-    filter(social_index_dataset, domain == input$domain)
-  })
-  observeEvent(domain(), {
-    print("event subdomain")
-    updateSelectInput(session,"subdomain", choices = sort(unique(domain()$subdomain)))
-  })
-  subdomain <- reactive({
-    req(input$subdomain)
-    filter(domain(), subdomain == input$subdomain)
-  })
-  observeEvent(subdomain(), {
-    print("event indicator")
-    updateSelectInput(session,inputId = "indicator", choices = sort(unique(subdomain()$indicator)))
-  })
-  indicator <- reactive({
-    req(input$indicator)
-    filter(subdomain(), indicator == input$indicator)
-  })
-  observeEvent(indicator(), {
-    print("event variable")
-    updateSelectInput(session,inputId = "variable_name", choices = sort(unique(indicator()$variable)))
-  })
-  variable_name <- reactive({
-    req(input$variable_name)
-    filter(indicator(), variable == input$variable_name)
+    print("domain changed")
+    #req(input$domain)
+    print(input$domain)
+    filter(social_index_dataset, social_index_dataset$domain==input$domain)
   })
   
-  observeEvent(variable_name(), {
-    print("event sex")
-    updateSelectInput(session,inputId = "sex", choices = sort(unique(variable_name()$sex)))
+  observeEvent(domain(), {
+    print("observe domain change,return subdomain choices")
+    print(input$domain)
+    print("update subdomain choices")
+    choices = sort(unique(domain()$subdomain))
+    updateSelectInput(session=session,"subdomain",choices = choices)
+    print(choices)
   })
+  
+  subdomain <- reactive({
+    print("subdomain changed")
+    req(input$subdomain)
+    print(input$subdomain)
+    filter(domain(), subdomain == input$subdomain)
+  })
+  
+  observeEvent(subdomain(),{
+    #req(input$subdomain)
+    print("observe subdomain change,return indicator choices")
+    print(input$subdomain)
+    print("update indicator choices")
+    choices = sort(unique(subdomain()$indicator))
+    updateSelectInput(session,"indicator",choices = choices)
+    print(choices)
+  })
+  
+  indicator <- reactive({
+    print("indicator changed")
+    req(input$indicator)
+    print(input$indicator)
+    filter(subdomain(), indicator == input$indicator)
+  })
+  observeEvent(indicator(),{
+    #req(input$indicator)
+    print("observe indicator change,return variable names choices")
+    print(input$indicator)
+    print("update variable name choices")
+    choices = sort(unique(indicator()$variables))
+    updateSelectInput(session,"variable_name",choices = choices)
+    print(choices)
+  })
+  variable_name <- reactive({
+    print("variable_name changed")
+    req(input$variable_name)
+    print(input$variable_name)
+    filter(indicator(), variables== input$variable_name)
+  })
+  observeEvent(variable_name(),{
+    #req(input$variable_name)
+    print("observe variable_name change,return sex choices")
+    print(input$variable_name)
+    print("update sex choices")
+    choices = sort(unique(variable_name()$sex))
+    updateSelectInput(session,"sex",choices = choices)
+    print(choices)
+  })
+  
+  ###
   sex <- reactive({
+    print("sex changed")
     req(input$sex)
+    print(input$sex)
     filter(variable_name(), sex == input$sex)
   })
   observeEvent(sex(), {
-    print("event race")
-    updateSelectInput(session,inputId = "race", choices = sort(unique(sex()$race)))
+    #req(input$sex)
+    print("observe sex change,return race choices")
+    print(input$sex)
+    print("update race choices")
+    choices = sort(unique(sex()$race))
+    updateSelectInput(session,"race",choices = choices)
+    print(choices)
   })
   race <- reactive({
+    print("race changed")
     req(input$race)
+    print(input$race)
     filter(sex(), race == input$race)
   })
-  observeEvent(race(), {
-    print("event age")
-    updateSelectInput(session,inputId = "age", choices = sort(unique(race()$age)))
+  observeEvent(race(),{
+    #req(input$race)
+    print("observe race change,return age choices")
+    print(input$race)
+    print("update age choices")
+    choices = sort(unique(race()$age))
+    updateSelectInput(session,"age",choices = choices)
+    print(choices)
   })
-  
   age <- reactive({
+    print("age changed")
     req(input$age)
+    print(input$age)
     filter(race(), age == input$age)
   })
-  
-  observeEvent(age(), {
-    print("event year")
-    updateSelectInput(session,inputId = "year", choices = sort(unique(age()$year)))
+  observeEvent(age(),{
+    #req(input$age)
+    print("observe age change,return geo_level choices")
+    print(input$age)
+    print("update geo_level choices")
+    choices = sort(unique(age()$geo_level))
+    updateSelectInput(session,"geo_level",choices = choices)
+    print(choices)
+  })
+  geo_level <- reactive({
+    print("geo_level changed")
+    req(input$geo_level)
+    print(input$geo_level)
+    filter(age(), geo_level == input$geo_level)
+  })
+  observeEvent({geo_level()},{
+    req(input$geo_level)
+    print("observe geo_level change,return year choices")
+    print(input$geo_level)
+    print("update year choices")
+    choices = sort(unique(geo_level()$year))
+    updateSelectInput(session,"year",choices = choices)
+    print(choices)
   })
   
   year <- reactive({
+    print("year changed")
     req(input$year)
-    filter(age(), year == input$year)
+    print(input$year)
+    filter(geo_level(), year == input$year)
   })
+  observeEvent({
+    geo_level()
+    year()},{
+      #updateSliderInput(session,'yearslider', value=unique(year()$year),
+      #                   min = min(as.numeric(age()$year)), max = max(as.numeric(age()$year)), step = 1)
+    }) 
   
-  # reactive sliderinput
-  observeEvent(year(),{
-    print("event slider")
-    updateSliderInput(session, "yearslider", value = input$year,
-                      min = min(as.numeric(age()$year)), max = max(as.numeric(age()$year)), step = 1)
-  })
-  yearslider <- reactive({
-    req(input$yearslider)
-    filter(age(), yearslider == input$yearslider)
-  })
-  
-  observeEvent(year(), {
-    print("event geo_level")
-    print(year())
-    updateSelectInput(session,inputId = "geo_level", choices = sort(unique(year()$geo_level)))
-  })
-  
-  filtered_data <- reactive({
+  output$mymap <- renderLeaflet({
+    print("observe geo level change, change map")
     req(input$year)
-    filter(year(), geo_level == input$geo_level)
-  })
-
-  observeEvent(filtered_data(),{
-    #join dataset and shapefile
-    f_data <- filtered_data()
-    print("bug0")
-    f_data$geo_id = as.character(ifelse((f_data$geo_level) %in% c("State","County","Tract"), substr(f_data$geo_id,3,nchar(f_data$geo_id)), substr(f_data$geo_id,7,11)))
+    print(input$year)
+    f_data <- year()
+    f_data$geo_id = substr(f_data$geo_id,3,nchar(f_data$geo_id))
     names(f_data)[1] <- 'GEOID'
-    print("bug1")
     mapdata_merged <- dplyr::left_join(f_data,test[,c("GEOID","geometry")], "GEOID", "GEOID")
+    if (unique(mapdata_merged$dataset_id == 4)){
+      print("filter ")
+      new_filtered <- aggregate(as.numeric(value) ~ GEOID, data = mapdata_merged, FUN = mean)
+      names(new_filtered)[1] <- 'GEOID'
+      names(new_filtered)[2] <- 'value'
+      print(new_filtered)
+      print(test[,c("GEOID","geometry")])
+      new_merged <- dplyr::inner_join(new_filtered,test[,c("GEOID","geometry")], "GEOID","GEOID")
+      print(new_merged)
+      mapdata_merged_sf <- new_merged
+    }
     # transfer to spatial dataset
-    print("bug2")
     mapdata_merged_sf <-st_as_sf(mapdata_merged)
-    print(mapdata_merged_sf)
-    pal_fun <- colorNumeric("YlOrRd", NULL, n =7)
-    p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variable),"<br/>",
+    pal_fun_num <- colorNumeric("YlOrRd", NULL, n =7)
+    #pal_fun_cat <- colorFactor("YlOrRd", NULL, n =7)
+    p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                       "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                       "<strong> Total estimate </strong>", unique(mapdata_merged_sf$value))
-    #breaks_qt <- classIntervals(c(min(as.numeric(mapdata_merged_sf$value)), as.numeric(mapdata_merged_sf$value)), n = 7, style = "quantile")
-    
-    output$mymap <- renderLeaflet({
-      leaflet(mapdata_merged_sf) %>%
-        addProviderTiles(provider = "CartoDB") %>% 
-        addPolygons(
-          stroke = FALSE,
-          fillColor = ~pal_fun(as.numeric(value)), # set fill color with function from above and value
-          fillOpacity = 0.5, 
-          smoothFactor = 0.2,
-          popup = p_popup) %>% 
-        addLegend("bottomright",  # location
-                  pal = pal_fun,     # palette function
-                  values = ~as.numeric(value),
-                  title = unique(mapdata_merged_sf$variable)) %>% # legend title 
-        setView(lng = -94, lat = 38.82, zoom = 4)
-    })
+
+    leaflet(mapdata_merged_sf) %>%
+      addProviderTiles(provider = "CartoDB") %>% 
+      addPolygons(
+        stroke = FALSE,
+        fillColor = ~pal_fun_num(as.numeric(value)), # set fill color with function from above and value
+        fillOpacity = 0.5, 
+        smoothFactor = 0.2,
+        popup = p_popup) %>% 
+      addLegend("bottomright",  # location
+                pal = pal_fun_num,     # palette function
+                values = ~as.numeric(value),
+                title = unique(mapdata_merged_sf$variables)) %>% # legend title 
+      setView(lng = -94, lat = 38.82, zoom = 4)
   })
 }
 
