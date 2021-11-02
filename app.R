@@ -20,7 +20,13 @@ library(tigris)
 options(tigris_use_cache = TRUE)
 library(sf)
 library(classInt)
+library(shinydashboard)
+
 library(RColorBrewer)
+library(viridis)
+library(ggplot2)
+
+library(DT)
 
 #library(shinydashboard)
 suppressWarnings(expr)
@@ -40,13 +46,19 @@ dbListTables(conn = con)
 
 
 # get the required tables from the sql database 
-social_index_dataset = dbGetQuery(con, "SELECT * from public.tbl_social_weather_dataset 
+social_index_dataset = dbGetQuery(con, "SELECT * from public.tbl_social_weather_dataset
                                         LEFT JOIN public.tbl_dataset_info using(dataset_id)
                                         LEFT JOIN public.tbl_geography using(geo_id)")
+tbl_age = dbReadTable(con,"tbl_Age")
+tbl_population =  dbReadTable(con,"tbl_Population")
+tbl_lifeexpectancy =  dbReadTable(con,"tbl_LifeExpectancy")
+tbl_race = dbReadTable(con,"tbl_Race")
+tbl_geography =  dbReadTable(con,"tbl_geography")
 
-
-
-
+tbl_age_geo = dplyr::left_join(tbl_age,tbl_geography, "geo_id", "geo_id")
+tbl_pop_geo = dplyr::left_join(tbl_population,tbl_geography, "geo_id", "geo_id")
+tbl_le_geo = dplyr::left_join(tbl_lifeexpectancy,tbl_geography, "geo_id", "geo_id")
+tbl_race_geo = dplyr::left_join(tbl_race,tbl_geography, "geo_id", "geo_id")
 
 # disconnect database
 dbDisconnect(con) 
@@ -85,6 +97,7 @@ social_index_dataset$value[is.na(social_index_dataset$value)] <- 'NA'
 social_index_dataset <- social_index_dataset %>%
   mutate(value = case_when(endsWith(social_index_dataset$value,"%") ~substr(social_index_dataset$value,0,nchar(social_index_dataset$value)-1),TRUE ~social_index_dataset$value))
 
+social_index_dataset_copy <- social_index_dataset
 # clean up non numeric values
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE20']  <- "10"
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='PS']  <- "60"
@@ -145,44 +158,47 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                selectInput("race", "Race:",choices=NULL),
                                selectInput("age", "Age:",choices=NULL),
                                selectInput("geo_level", "Geographic Level:",choices=NULL),
-                               selectInput("year", "Year:",choices=NULL)
+                               selectInput("year", "Year:",choices=NULL),
+                               #sliderInput("year_slider", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE)
                              ),
                              mainPanel(
                                tabsetPanel(
+                                 id = "panels",
                                  tabPanel("Map View", verbatimTextOutput("mapview"),
                                           fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                        sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "55vh")))), 
+                                                                        #sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
+                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "65vh")))), 
                                                                         fluidRow(column(width = 12, " ", style='padding:3px;')),
                                                                         fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
                                                   and click on the map for additional details. Please note that data are not currently
                                                   available for every county in every year, and estimates will change as we process more data.", 
                                                                                         style='font-family:Avenir, Helvetica;font-size:16;text-align:center')),
                                           )))),
-                                 tabPanel("State Profile View", verbatimTextOutput("stateview")),
+                                 tabPanel("View Data", verbatimTextOutput("viewdata"),
+                                          h2("Social Weather Index Data Table"),
+                                          DT::dataTableOutput("mytable")),
+                                 tabPanel("State Profile View", verbatimTextOutput("stateview"),
+                                          fluidRow(column(3,selectInput("state","State:", choices=sort(unique(filter(social_index_dataset,geo_level=='State')$geo_name)),selected = "Maryland")),
+                                                   column(3, selectInput("demographics", "Demographics:", choices=c("Age","Life Expectancy","Population","Race"),selected = NULL)),
+                                                   column(3, sliderInput("year_period", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE))),
+                                          plotOutput("plot")),
                                  tabPanel("County Profile View", tableOutput("countyview"),
-                                          fluidRow(column(8, wellPanel(
-                                            tags$style(HTML(".js-irs-1 .irs-single, .js-irs-1 .irs-bar-edge, .js-irs-1 .irs-bar{
-                                                     background: #48C9B0;
-                                                     border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                            sliderInput("countyview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
-                                          )))),
+                                          fluidRow(column(4,selectInput("county","County:", choices=sort(unique(filter(social_index_dataset,geo_level=='County')$geo_name)),selected = "Maryland")),
+                                                   column(4, selectInput("demographics2", "Demographics:", choices=c("Age","Life Expectancy","Population","Race"),selected = NULL)),
+                                                   column(4, sliderInput("year_period2", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE))),
+                                          plotOutput("plot2")),
                                  tabPanel("Tract Profile View", tableOutput("tractview"),
-                                          fluidRow(column(8, wellPanel(
-                                            tags$style(HTML(".js-irs-2 .irs-single, .js-irs-2 .irs-bar-edge, .js-irs-2 .irs-bar{
-                                                     background: #48C9B0;
-                                                     border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                            sliderInput("tractview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
-                                          )))),
+                                          fluidRow(column(4,selectInput("tract","Tract:", choices=sort(unique(filter(social_index_dataset,geo_level=='Tract')$geo_name)),selected = "Maryland")),
+                                                   column(4, selectInput("demographics3", "Demographics:", choices=c("Age","Life Expectancy","Population","Race"),selected = NULL)),
+                                                   column(4, sliderInput("year_period3", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE))),
+                                          plotOutput("plot3")),
                                  tabPanel("Zip Code Profile View", tableOutput("zctaview"),
-                                          fluidRow(column(8, wellPanel(
-                                            tags$style(HTML(".js-irs-3 .irs-single, .js-irs-3 .irs-bar-edge, .js-irs-3 .irs-bar{
-                                                     background: #48C9B0;
-                                                     border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                            sliderInput("zctaview", "Select Mapping Year", value =2021, min = 1990, max=2021, step=1,animate=TRUE)
-                                          ))))
+                                          fluidRow(column(4,selectInput("zcta","Zip Code:", choices=sort(unique(filter(social_index_dataset,geo_level=='ZCTA')$geo_name)),selected = "Maryland")),
+                                                   column(4, selectInput("demographics4", "Demographics:", choices=c("Age","Life Expectancy","Population","Race"),selected = NULL)),
+                                                   column(4, sliderInput("year_period4", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE))),
+                                          plotOutput("plot4"))
                                )))), 
                   tabPanel("About this site",h2("About Social Weather Index"))
 )
@@ -308,7 +324,7 @@ server <- function(input,output,session) {
     filter(age(), geo_level == input$geo_level)
   })
   observeEvent({geo_level()},{
-    req(input$geo_level)
+    #req(input$geo_level)
     print("observe geo_level change,return year choices")
     print(input$geo_level)
     print("update year choices")
@@ -323,12 +339,31 @@ server <- function(input,output,session) {
     print(input$year)
     filter(geo_level(), year == input$year)
   })
-  observeEvent({
-    geo_level()
-    year()},{
+  
+  #observeEvent({geo_level()},{
+    #print("observe geo_level")
+    #print(geo_level())
+    #print(geo_level()$year)
+    #choices = sort(unique(geo_level()$year))
+    #print("choices")
+    #print(choices)
+    #updateSliderInput(session,'year_slider', value=range(choices),
+#                      min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
+ # })
+  
+  #year_slider <- reactive({
+   # req(input$year_slider)
+    #print("year changed")
+    #print(input$year_slider)
+    #filter(geo_level(), year == input$year_slider)
+  #})
+  
+  #observeEvent({
+    #geo_level()
+    #year()},{
       #updateSliderInput(session,'yearslider', value=unique(year()$year),
       #                   min = min(as.numeric(age()$year)), max = max(as.numeric(age()$year)), step = 1)
-    }) 
+   # }) 
   
   output$mymap <- renderLeaflet({
     print("observe geo level change, change map")
@@ -356,7 +391,7 @@ server <- function(input,output,session) {
     p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                       "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                       "<strong> Total estimate </strong>", unique(mapdata_merged_sf$value))
-
+    
     leaflet(mapdata_merged_sf) %>%
       addProviderTiles(provider = "CartoDB") %>% 
       addPolygons(
@@ -371,6 +406,338 @@ server <- function(input,output,session) {
                 title = unique(mapdata_merged_sf$variables)) %>% # legend title 
       setView(lng = -94, lat = 38.82, zoom = 4)
   })
+  
+  output$mytable = DT::renderDataTable({
+    x<-year()
+    print(x)
+    names(x)[5] <- 'values'
+    names(x)[11] <- 'geo_names'
+    names(x)[12] <- 'geo_levels'
+    names(x)[13]<- "metro_areas"
+    y<-dplyr::left_join(year(),x,by=c("dataset_id"="dataset_id","domain"="domain","subdomain"="subdomain",
+    "indicator"="indicator","variable"="variable","year"="year","sex"="sex","race" ="race","age"="age",
+    "geo_id"="geo_id","NCESSCH" ="NCESSCH","SCHNAM"="SCHNAM","metro_area"="metro_areas"))
+    print("y")
+    print(y)
+    y[,c("domain","subdomain","indicator","variable","sex","race","age","year","values","geo_name","NCESSCH","SCHNAM")]
+  })
+  #######################State profile view########################
+  demographics <- reactive({
+    print("demographics changed")
+    req(input$demographics)
+    print(input$demographics)
+    if (input$demographics == "Age") {
+      tbl_age_geo
+    }
+    else if (input$demographics == "Population"){
+      tbl_pop_geo
+    }
+    else if (input$demographics == "Race"){
+      tbl_race_geo
+    }
+    else{
+      tbl_le_geo
+    }
+  })
+  
+  state <- reactive({
+    req(input$state)
+    print("state changed")
+    print(input$state)
+    print(demographics())
+    filter(filter(demographics(), geo_name == input$state),geo_level=="State")
+  })
+  
+  observeEvent(state(),{
+    print("observe state")
+    print(state())
+    choices = sort(unique(state()$year))
+    print("choices")
+    print(choices)
+    updateSliderInput(session,'year_period', value=range(choices),
+                                         min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
+    #updateSelectInput(session,"year_period",choices = choices)
+  })
+  
+  year_period <- reactive({
+    req(input$year_period)
+    print("year changed")
+    print(input$year_period)
+    filter(state(), year == input$year_period)
+  })
+
+  output$plot <- renderPlot({
+    print("plot")
+    if(dim(year_period())[1] == 0){
+      renderText("Unavailable data")
+    }else{
+      if (input$demographics == "Race" | input$demographics == "Age"){
+        print(year_period())
+        dataset<-year_period()
+        if (input$demographics == "Race"){
+          print("filter")
+          dataset<-filter(dataset,label!="estimate_total_population")
+          print(dataset)
+        }
+        dataset$label <- factor(dataset$label, levels = dataset$label)
+        print(dataset$label)
+        #ggplot(dataset,aes(fill=dataset$label,x=dataset$year,y=as.numeric(estimate)))+
+        ggplot(dataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
+          coord_flip() +
+          scale_fill_continuous(type = "viridis")+theme(legend.position="right")+
+          geom_bar(position="stack",stat="identity")
+        
+          #+ggtitle("Selected Demographic View in ", dataset$geo_Name)
+      }
+      else{
+        print(state())
+        dataset<-state()
+        ggplot(dataset, aes(x=state()$year, y = as.numeric(estimate),fill= as.numeric(estimate)))+geom_bar(stat="identity")+
+          scale_fill_continuous(type = "viridis")
+      }
+    }
+    })
+  #######################County profile view########################
+  demographics2 <- reactive({
+    print("demographics changed")
+    req(input$demographics2)
+    print(input$demographics2)
+    if (input$demographics2 == "Age") {
+      tbl_age_geo
+    }
+    else if (input$demographics2 == "Population"){
+      tbl_pop_geo
+    }
+    else if (input$demographics2 == "Race"){
+      tbl_race_geo
+    }
+    else{
+      tbl_le_geo
+    }
+  })
+  
+  county <- reactive({
+    req(input$county)
+    print("County changed")
+    print(input$state)
+    print(demographics2())
+    filter(filter(demographics2(), geo_name == input$county),geo_level=="County")
+  })
+  
+  observeEvent(county(),{
+    print("observe county")
+    print(county())
+    choices = sort(unique(county()$year))
+    print("choices")
+    print(choices)
+    updateSliderInput(session,'year_period2', value=range(choices),
+                      min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
+    #updateSelectInput(session,"year_period",choices = choices)
+  })
+  
+  year_period2 <- reactive({
+    req(input$year_period2)
+    print("year changed")
+    print(input$year_period2)
+    filter(county(), year == input$year_period2)
+  })
+  
+  output$plot2 <- renderPlot({
+    print("plot2")
+    if(dim(year_period2())[1] == 0){
+      renderText("Unavailable data")
+    }else{
+      if (input$demographics2 == "Race" | input$demographics2 == "Age"){
+        print(year_period2())
+        dataset<-year_period2()
+        if (input$demographics2 == "Race"){
+          print("filter")
+          dataset<-filter(dataset,label!="estimate_total_population")
+          print(dataset)
+        }
+        dataset$label <- factor(dataset$label, levels = dataset$label)
+        print(dataset$label)
+        #ggplot(dataset,aes(fill=dataset$label,x=dataset$year,y=as.numeric(estimate)))+
+        ggplot(dataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
+          coord_flip() +
+          scale_fill_continuous(type = "viridis")+theme(legend.position="right")+
+          geom_bar(position="stack",stat="identity")
+        
+        #+ggtitle("Selected Demographic View in ", dataset$geo_Name)
+      }
+      else{
+        print(county())
+        dataset<-county()
+        ggplot(dataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+geom_bar(stat="identity")+
+          scale_fill_continuous(type = "viridis")
+      }
+    }
+  })
+  
+  #######################Tract profile view########################
+  demographics3 <- reactive({
+    print("demographics3 changed")
+    req(input$demographics3)
+    print(input$demographics3)
+    if (input$demographics3 == "Age") {
+      tbl_age_geo
+    }
+    else if (input$demographics3 == "Population"){
+      tbl_pop_geo
+    }
+    else if (input$demographics3 == "Race"){
+      tbl_race_geo
+    }
+    else{
+      tbl_le_geo
+    }
+  })
+  
+  tract <- reactive({
+    req(input$tract)
+    print("tract changed")
+    print(input$tract)
+    print(demographics3())
+    filter(filter(demographics3(), geo_name == input$tract),geo_level=="Tract")
+  })
+  
+  observeEvent(tract(),{
+    print("observe tract")
+    print(tract())
+    choices = sort(unique(tract()$year))
+    print("choices")
+    print(choices)
+    print(input$demographics3)
+    if (input$demographics3 !="Life Expectancy"){
+      updateSliderInput(session,'year_period3', value=range(choices),
+                        min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
+      }
+    #updateSelectInput(session,"year_period",choices = choices)
+  })
+  
+  year_period3 <- reactive({
+    req(input$year_period3)
+    print("year changed")
+    print(input$year_period3)
+    filter(tract(), year == input$year_period3)
+  })
+  
+  output$plot3 <- renderPlot({
+    print("plot3")
+    if (input$demographics3 == "Race" | input$demographics3 == "Age"){
+        print(year_period3())
+        dataset<-year_period3()
+        if (input$demographics3 == "Race"){
+          print("filter")
+          dataset<-filter(dataset,label!="estimate_total_population")
+          print(dataset)
+        }
+        dataset$label <- factor(dataset$label, levels = dataset$label)
+        print(dataset$label)
+        #ggplot(dataset,aes(fill=dataset$label,x=dataset$year,y=as.numeric(estimate)))+
+        ggplot(dataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
+          coord_flip() +
+          scale_fill_continuous(type = "viridis")+theme(legend.position="right")+
+          geom_bar(position="stack",stat="identity")
+        
+        #+ggtitle("Selected Demographic View in ", dataset$geo_Name)
+      }
+    else{
+        print(tract())
+        dataset<-tract()
+        ggplot(dataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+geom_bar(stat="identity")+
+          scale_fill_continuous(type = "viridis")
+      }
+  })
+  
+  #######################ZCTA profile view########################
+  demographics4 <- reactive({
+    print("demographics changed")
+    req(input$demographics4)
+    print(input$demographics4)
+    if (input$demographics4 == "Age") {
+      tbl_age_geo
+    }
+    else if (input$demographics4 == "Population"){
+      tbl_pop_geo
+    }
+    else if (input$demographics4 == "Race"){
+      tbl_race_geo
+    }
+    else{
+      tbl_le_geo
+    }
+  })
+  
+  zcta <- reactive({
+    req(input$zcta)
+    print("zcta changed")
+    print(input$zcta)
+    print(demographics4())
+    filter(filter(demographics4(), geo_name == input$zcta),geo_level=="ZCTA")
+  })
+  
+  observeEvent(zcta(),{
+    print("observe zcta")
+    print(zcta())
+    choices = sort(unique(zcta()$year))
+    print("choices")
+    print(choices)
+    print(input$demographics4)
+    if (input$demographics4 !="Life Expectancy"){
+      updateSliderInput(session,'year_period4', value=range(choices),
+                        min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
+    }
+    #updateSelectInput(session,"year_period",choices = choices)
+  })
+  
+  year_period4 <- reactive({
+    req(input$year_period4)
+    print("year changed")
+    print(input$year_period4)
+    filter(zcta(), year == input$year_period4)
+  })
+  
+  output$plot4 <- renderPlot({
+    print("plot4")
+    if (input$demographics4 == "Race" | input$demographics4 == "Age"){
+        print(year_period4())
+        dataset<-year_period4()
+        if (input$demographics4 == "Race"){
+          print("filter")
+          dataset<-filter(dataset,label!="estimate_total_population")
+          print(dataset)
+        }
+        dataset$label <- factor(dataset$label, levels = dataset$label)
+        print(dataset$label)
+        #ggplot(dataset,aes(fill=dataset$label,x=dataset$year,y=as.numeric(estimate)))+
+        ggplot(dataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
+          coord_flip() +
+          scale_fill_continuous(type = "viridis")+theme(legend.position="right")+
+          geom_bar(position="stack",stat="identity")
+        
+        #+ggtitle("Selected Demographic View in ", dataset$geo_Name)
+      }
+    else{
+      print(zcta())
+      dataset<-zcta()
+      ggplot(dataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+geom_bar(stat="identity")+
+        scale_fill_continuous(type = "viridis")
+      }
+  })
+  
+  observeEvent(input$link_to_tabpanel_b, {
+    newvalue <- "B"
+    updateTabItems(session, "panels", newvalue)
+  })
+  observeEvent(input$link_to_tabpanel_a, {
+    newvalue <- "A"
+    updateTabsetPanel(session, "panels", newvalue)
+  })
+  
+  
+  
 }
 
 shinyApp(body, server)
+#}
