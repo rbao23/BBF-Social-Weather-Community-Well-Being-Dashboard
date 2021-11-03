@@ -18,6 +18,7 @@ library(tidyverse)
 library(leaflet)
 library(tigris)
 options(tigris_use_cache = TRUE)
+
 library(sf)
 library(classInt)
 library(shinydashboard)
@@ -34,8 +35,8 @@ suppressWarnings(expr)
 ################## Getting data from the database e#############################################
 
 # script to connect
-source("H:/ruihab/Documents/BBF-Social-Weather-Dashboard/code_base/dbconnect.R")
-source("H:/ruihab/Documents/BBF-Social-Weather-Dashboard/code_base/pgpass.R")
+source("code_base/dbconnect.R")
+source("code_base/pgpass.R")
 
 # create a connection to the postgresql database
 # note that "con" will be used later in each connection to the database
@@ -199,8 +200,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                                    column(4, selectInput("demographics4", "Demographics:", choices=c("Age","Life Expectancy","Population","Race"),selected = NULL)),
                                                    column(4, sliderInput("year_period4", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE))),
                                           plotOutput("plot4"))
-                               )))), 
-                  tabPanel("About this site",h2("About Social Weather Index"))
+                               ))))
 )
 
 ############################################### server.R ##################################################
@@ -407,20 +407,27 @@ server <- function(input,output,session) {
       setView(lng = -94, lat = 38.82, zoom = 4)
   })
   
+  
   output$mytable = DT::renderDataTable({
     x<-year()
-    print(x)
+    print("X")
     names(x)[5] <- 'values'
     names(x)[11] <- 'geo_names'
     names(x)[12] <- 'geo_levels'
     names(x)[13]<- "metro_areas"
-    y<-dplyr::left_join(year(),x,by=c("dataset_id"="dataset_id","domain"="domain","subdomain"="subdomain",
-    "indicator"="indicator","variable"="variable","year"="year","sex"="sex","race" ="race","age"="age",
-    "geo_id"="geo_id","NCESSCH" ="NCESSCH","SCHNAM"="SCHNAM","metro_area"="metro_areas"))
+    print(x)
+    print(social_index_dataset_copy)
+    names(social_index_dataset_copy)[17] <- 'variables1'
+    y<-dplyr::left_join(x,social_index_dataset_copy,by=c("dataset_id"="dataset_id","domain"="domain","subdomain"="subdomain",
+                                      "indicator"="indicator","variables"="variables1","year"="year","sex"="sex","race" ="race","age"="age",
+                                      "geo_id"="geo_id","NCESSCH" ="NCESSCH","SCHNAM"="SCHNAM","metro_areas"="metro_area"))
+    
     print("y")
     print(y)
-    y[,c("domain","subdomain","indicator","variable","sex","race","age","year","values","geo_name","NCESSCH","SCHNAM")]
+    y[,c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM")]
+    #options = list(pageLength=50, scrollX='400px')
   })
+  
   #######################State profile view########################
   demographics <- reactive({
     print("demographics changed")

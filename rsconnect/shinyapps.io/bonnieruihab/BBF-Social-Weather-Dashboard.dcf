@@ -1,0 +1,13 @@
+name: BBF-Social-Weather-Dashboard
+title: BBF-Social-Weather-Dashboard
+username:
+account: bonnieruihab
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5030157
+bundleId: 5205002
+url: https://bonnieruihab.shinyapps.io/BBF-Social-Weather-Dashboard/
+when: 1635897745.01186
+lastSyncTime: 1635897745.01186
+asMultiple: FALSE
+asStatic: FALSE
