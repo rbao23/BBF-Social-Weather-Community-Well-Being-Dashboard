@@ -1,0 +1,14 @@
+name: bbf-social-weather-dashboard
+title: BBF-Social-Weather-Dashboard
+username: ruihab
+account: ruihab
+server: rsc.csde.washington.edu
+hostUrl: https://rsc.csde.washington.edu/__api__
+appId: 8
+bundleId: 15
+url: https://rsc.csde.washington.edu/content/93739dd9-4d52-439e-92c0-849100eed078/
+when: 1636347306.38998
+lastSyncTime: 1636347306.38998
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: code_base/r test.R|README.md

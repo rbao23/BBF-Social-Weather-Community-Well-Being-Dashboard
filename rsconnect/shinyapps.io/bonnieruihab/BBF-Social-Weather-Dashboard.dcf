@@ -5,9 +5,10 @@ account: bonnieruihab
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5030157
-bundleId: 5205002
+bundleId: 5225365
 url: https://bonnieruihab.shinyapps.io/BBF-Social-Weather-Dashboard/
-when: 1635897745.01186
-lastSyncTime: 1635897745.01186
+when: 1636346493.49971
+lastSyncTime: 1636346493.49971
 asMultiple: FALSE
 asStatic: FALSE
+ignoredFiles: code_base/r test.R|README.md

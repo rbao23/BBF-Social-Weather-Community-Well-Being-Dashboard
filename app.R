@@ -17,7 +17,7 @@ library(magrittr)
 library(tidyverse)
 library(leaflet)
 library(tigris)
-options(tigris_use_cache = TRUE)
+#options(tigris_use_cache = TRUE)
 
 library(sf)
 library(classInt)
@@ -28,9 +28,9 @@ library(viridis)
 library(ggplot2)
 
 library(DT)
+library(hrbrthemes)
 
 #library(shinydashboard)
-suppressWarnings(expr)
 
 ################## Getting data from the database e#############################################
 
@@ -148,9 +148,10 @@ test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")]
 
 body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   title = "Social Weather Community Well-Being Dashboard",
-                  tabPanel("Comparion Map",h2("Select Dataset"),
+                  tabPanel("Comparion Map",
                            sidebarLayout(
                              sidebarPanel(
+                               h3("Select Map Dataset"),
                                selectInput("domain","Domain:",choices=sort(unique(social_index_dataset$domain)),selected = NULL),
                                selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
                                selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
@@ -161,7 +162,9 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                selectInput("geo_level", "Geographic Level:",choices=NULL),
                                selectInput("year", "Year:",choices=NULL),
                                #sliderInput("year_slider", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE)
-                             ),
+                               h3("Select Location for Trend Line Comparison "),
+                               selectInput("linelocation", "Location:",choices=NULL),
+                                ),
                              mainPanel(
                                tabsetPanel(
                                  id = "panels",
@@ -170,8 +173,9 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
                                                                         #sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "65vh")))), 
+                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "50vh")))), 
                                                                         fluidRow(column(width = 12, " ", style='padding:3px;')),
+                                                                        plotOutput("lineplot", height = "250px"), 
                                                                         fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
                                                   and click on the map for additional details. Please note that data are not currently
                                                   available for every county in every year, and estimates will change as we process more data.", 
@@ -330,6 +334,7 @@ server <- function(input,output,session) {
     print("update year choices")
     choices = sort(unique(geo_level()$year))
     updateSelectInput(session,"year",choices = choices)
+    updateSelectInput(session,"linelocation",choices = sort(unique(geo_level()$geo_name)))
     print(choices)
   })
   
@@ -338,6 +343,13 @@ server <- function(input,output,session) {
     req(input$year)
     print(input$year)
     filter(geo_level(), year == input$year)
+  })
+  
+  linelocation <- reactive({
+    print("location changed")
+    req(input$linelocation)
+    print(input$linelocation)
+    filter(geo_level(), geo_name == input$linelocation)
   })
   
   #observeEvent({geo_level()},{
@@ -404,9 +416,25 @@ server <- function(input,output,session) {
                 pal = pal_fun_num,     # palette function
                 values = ~as.numeric(value),
                 title = unique(mapdata_merged_sf$variables)) %>% # legend title 
-      setView(lng = -94, lat = 38.82, zoom = 4)
+      setView(lng = -94, lat = 38.82, zoom = 4.25)
   })
-  
+    
+  output$lineplot <- renderPlot({
+    US_values <- aggregate(as.numeric(geo_level()$value), list(geo_level()$year), FUN=mean)
+    names(US_values)[1] <- 'year'
+    names(US_values)[2] <- 'value'
+    
+    
+  plotdata = merge(linelocation()[,c("year","variables","value")], US_values[,c("year","value")], by="year")
+   names(plotdata)[3] <- unique(linelocation()$geo_name)
+   names(plotdata)[4] <- 'Average'
+   print(plotdata)
+   datamelted <- reshape2::melt(plotdata[,c("year", unique(linelocation()$geo_name),"Average")], id.var='year')
+   print("plot")
+   print(datamelted)
+   ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) + geom_line()+geom_point()+
+     ggtitle(paste0(unique(linelocation()$variables), " Trend Line Comparison"))
+  })
   
   output$mytable = DT::renderDataTable({
     x<-year()
@@ -472,6 +500,7 @@ server <- function(input,output,session) {
     print(input$year_period)
     filter(state(), year == input$year_period)
   })
+  
 
   output$plot <- renderPlot({
     print("plot")
@@ -732,18 +761,6 @@ server <- function(input,output,session) {
         scale_fill_continuous(type = "viridis")
       }
   })
-  
-  observeEvent(input$link_to_tabpanel_b, {
-    newvalue <- "B"
-    updateTabItems(session, "panels", newvalue)
-  })
-  observeEvent(input$link_to_tabpanel_a, {
-    newvalue <- "A"
-    updateTabsetPanel(session, "panels", newvalue)
-  })
-  
-  
-  
 }
 
 shinyApp(body, server)
