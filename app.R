@@ -28,7 +28,6 @@ library(viridis)
 library(ggplot2)
 
 library(DT)
-library(hrbrthemes)
 
 #library(shinydashboard)
 
@@ -191,12 +190,12 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                           font-style: Bold;}")
                                           ),
                                           fluidRow(column(6, sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                   plotOutput("raceplot")),
+                                                          plotOutput("raceplot")),
                                                    column(6, sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                   plotOutput("ageplot"))),
-                                         fluidRow(column(6, plotOutput("popplot")),
-                                                  column(6, plotOutput("leplot")))
-                                          )
+                                                          plotOutput("ageplot"))),
+                                          fluidRow(column(6, plotOutput("popplot")),
+                                                   column(6, plotOutput("leplot")))
+                                 )
                                ))))
 )
 
@@ -414,14 +413,14 @@ server <- function(input,output,session) {
   
   output$lineplot <- renderPlot({
     print("line_location")
-   # print(linelocation())
+    # print(linelocation())
     lineloc<-linelocation()
     print(lineloc)
-   # print("geo_level_data before filter")
+    # print("geo_level_data before filter")
     geo_level_data <-geo_level()
-   # print(geo_level_data)
+    # print(geo_level_data)
     if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
-     print("lineloc_data after filter")
+      print("lineloc_data after filter")
       lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
       names(lineloc)[1] <- 'year'
       names(lineloc)[2] <- 'variables'
@@ -441,8 +440,8 @@ server <- function(input,output,session) {
     US_values <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$year), FUN=mean)
     names(US_values)[1] <- 'year'
     names(US_values)[2] <- 'value'
-   print("US")
-   print(US_values)
+    print("US")
+    print(US_values)
     
     
     plotdata = merge(lineloc[,c("year","variables","value")], US_values[,c("year","value")], by="year")
@@ -517,7 +516,8 @@ server <- function(input,output,session) {
            title="Pie Chart of Race")
     
     pie + coord_polar(theta = "y", start=0)+
-      scale_fill_viridis(discrete = TRUE)
+      scale_fill_viridis(discrete = TRUE)+
+      theme(panel.background = element_blank())
   })
   
   ############age
@@ -551,7 +551,8 @@ server <- function(input,output,session) {
       geom_bar(position="stack",stat="identity")+
       xlab("Age Group") +
       ylab("Year")+
-      ggtitle("Bar Chart of Age")
+      ggtitle("Bar Chart of Age")+
+      theme(panel.background = element_blank())
   })
   
   ############pop
@@ -563,12 +564,13 @@ server <- function(input,output,session) {
     print("poplot")
     popdataset <- popdata()
     print(popdataset)
-    ggplot(popdataset, aes(x=popdataset$year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
+    ggplot(popdataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
       geom_bar(stat="identity")+
       scale_fill_continuous(type = "viridis",name = "Number of People")+
       xlab("Year") +
       ylab("Number of People")+
-      ggtitle("Bar Chart of Population")
+      ggtitle("Bar Chart of Population")+
+      theme(panel.background = element_blank())
   })
   
   ############le
@@ -577,15 +579,16 @@ server <- function(input,output,session) {
   })
   
   output$leplot <- renderPlot({
-      print("poplot")
-      ledataset <- ledata()
-      print(ledataset)
-      ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
-        geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People")+
-        xlab("Year") +
-        ylab("Number of People")+
-        ggtitle("Bar Chart of Life Expectancy")
-    })
+    print("poplot")
+    ledataset <- ledata()
+    print(ledataset)
+    ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
+      geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People")+
+      xlab("Year") +
+      ylab("Number of People")+
+      ggtitle("Bar Chart of Life Expectancy")+
+      theme(panel.background = element_blank())
+  })
 }
 
 shinyApp(body, server)
