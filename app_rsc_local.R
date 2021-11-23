@@ -29,6 +29,7 @@ library(shinycssloaders)
 
 library(zoo)
 library(DT)
+library("formattable")
 
 social_index_dataset=read.csv(file = './dataset/social_index_dataset.csv')
 tbl_age=read.csv(file = './dataset/tbl_age.csv')
@@ -124,6 +125,8 @@ names(test_zcta)[1] <- 'GEOID'
 test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")])
 
 
+
+
 ############################################### ui.R ##################################################
 
 body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -144,7 +147,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                #sliderInput("year_slider", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE)
                                h3("Select Location"),
                                selectInput("line_state", "State:",choices=c("Washington","Maryland")),
-                               selectInput("linelocation", "Location:",choices=NULL),
+                               selectInput("linelocation", "Location:",choices=NULL)
                              ),
                              mainPanel(
                                tags$style(type="text/css",
@@ -167,7 +170,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                                                                         style='font-family:Avenir, Helvetica;font-size:16;text-align:center'))
                                           )))),
                                  tabPanel("Map Data", verbatimTextOutput("viewdata"),
-                                          h2("Social Weather Index Data Table"),
+                                          h2("Selected Social Weather Index Data Table"),
                                           DT::dataTableOutput("mytable")),
                                  tabPanel("Profile View", verbatimTextOutput("locprofview"),
                                           textOutput("text"),
@@ -175,13 +178,31 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                           font-size: 25px;
                                           font-style: Bold;}")
                                           ),
-                                          fluidRow(column(6, sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                   plotOutput("raceplot")),
-                                                   column(6, sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                   plotOutput("ageplot"))),
-                                         fluidRow(column(6, plotOutput("popplot")),
-                                                  column(6, plotOutput("leplot")))
-                                          )
+                                          fluidRow(column(6, sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=animationOptions(
+                                            interval = 1000,
+                                            loop = TRUE,
+                                            playButton = NULL,
+                                            pauseButton = NULL)),
+                                            plotOutput("raceplot")),
+                                            column(6, sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=animationOptions(
+                                              interval = 1000,
+                                              loop = TRUE,
+                                              playButton = NULL,
+                                              pauseButton = NULL)),
+                                              plotOutput("ageplot"))),
+                                          fluidRow(column(6, plotOutput("popplot")),
+                                                   column(6, plotOutput("leplot")))
+                                 ),
+                                 tabPanel("Profile Data", verbatimTextOutput("Profdata"),
+                                          textOutput("demogeotext"),
+                                          tags$head(tags$style("#demogeotext{color: Black;
+                                          font-size: 25px;
+                                          font-style: Bold;}")
+                                          ),
+                                          selectInput("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race")),
+                                          DT::dataTableOutput("profiledata"),
+                                          DT::dataTableOutput("allprofiledata"))
+                                 
                                ))))
 )
 
@@ -372,7 +393,7 @@ server <- function(input,output,session) {
   output$mymap <- renderLeaflet({
     print("observe geo level change, change map")
     req(input$year)
-
+    
     f_data <- year()
     f_data$geo_id = substr(f_data$geo_id,3,nchar(f_data$geo_id))
     names(f_data)[1] <- 'GEOID'
@@ -386,7 +407,7 @@ server <- function(input,output,session) {
     }
     # transfer to spatial dataset
     mapdata_merged_sf <-st_as_sf(mapdata_merged)
-    pal_fun_num <- colorNumeric("YlOrRd", NULL, n =7)
+    pal_fun_num <- colorNumeric("Blues", NULL, n =7)
     #pal_fun_cat <- colorFactor("YlOrRd", NULL, n =7)
     p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                       "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
@@ -399,10 +420,10 @@ server <- function(input,output,session) {
     print(input$geo_level)
     print(input$line_state)
     
-     if (input$line_state=="Washington"){
+    if (input$line_state=="Washington"){
       lng = -120.740135
       lat = 47
-      }
+    }
     else{
       lng = -76.61
       lat = 39.3
@@ -411,7 +432,7 @@ server <- function(input,output,session) {
       if(input$geo_level == "State"){
         zoom = 5.5
       }
-      else if (input$geo_level == 'Tract' | input$geo_level == 'County'){
+      else if (input$geo_level == 'County' | input$geo_level == 'Tract'){
         zoom = 7.5
       }
       else{
@@ -428,22 +449,23 @@ server <- function(input,output,session) {
       else{
         zoom = 8.5
       }
-   }
+    }
     leaflet(mapdata_merged_sf) %>%
       addProviderTiles(provider = "CartoDB") %>% 
       addPolygons(
-        color = "white",
+        color = "black",
         weight = 1,
         stroke = TRUE, 
-        smoothFactor = 0.5, 
-        fillOpacity = 0.7,
+        smoothFactor = 1, 
+        fillOpacity = 0.55,
         fillColor = ~pal_fun_num(as.numeric(value)), # set fill color with function from above and value
         popup = p_popup,
         label = ~geo_name,
-        highlightOptions = highlightOptions(weight = 3,
+        highlightOptions = highlightOptions(weight = 2,
                                             color = "white",
-                                            fillOpacity = 0.9,
-                                            bringToFront = TRUE)) %>% 
+                                            fillOpacity = 0.7, 
+                                            opacity =1,
+                                            bringToFront = T)) %>% 
       addLegend("bottomright",  # location
                 pal = pal_fun_num,     # palette function
                 values = ~as.numeric(value),
@@ -455,7 +477,7 @@ server <- function(input,output,session) {
     lineloc<-linelocation()
     geo_level_data <-geo_level()
     if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
-     print("lineloc_data after filter")
+      print("lineloc_data after filter")
       lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
       names(lineloc)[1] <- 'year'
       names(lineloc)[2] <- 'variables'
@@ -489,13 +511,21 @@ server <- function(input,output,session) {
     names(x)[12] <- 'geo_levels'
     names(x)[13]<- "metro_areas"
     names(social_index_dataset_copy)[17] <- 'variables1'
-    y<-dplyr::left_join(x,social_index_dataset_copy,by=c("dataset_id"="dataset_id","domain"="domain","subdomain"="subdomain",
-                                                         "indicator"="indicator","variables"="variables1","year"="year","sex"="sex","race" ="race","age"="age",
-                                                         "geo_id"="geo_id","NCESSCH" ="NCESSCH","SCHNAM"="SCHNAM","metro_areas"="metro_area"))
+    y <- dplyr::left_join(x,social_index_dataset_copy,by=c("dataset_id"="dataset_id","domain"="domain","subdomain"="subdomain",
+                                                           "indicator"="indicator","variables"="variables1","year"="year","sex"="sex","race" ="race","age"="age",
+                                                           "geo_id"="geo_id","NCESSCH" ="NCESSCH","SCHNAM"="SCHNAM","metro_areas"="metro_area"))
+    y<- y[,c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM")]
+    datatable(y,
+              rownames = F,
+              extensions = 'Buttons',
+              options = list(dom = 'Bt', 
+                             buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                             scrollX = TRUE),
+              colnames=c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM"))
     
-    y[,c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM")]
     #options = list(pageLength=50, scrollX='400px')
   })
+  
   
   #######################location profile view########################
   output$text <- renderText({ 
@@ -609,7 +639,45 @@ server <- function(input,output,session) {
       ggtitle("Bar Chart of Life Expectancy")+
       theme(panel.background = element_blank())
   })
+  ##############profile data##################
+  output$demogeotext <- renderText({ 
+    paste0(input$linelocation)
+  })
+  
+  selectdemo <- reactive({
+    req(input$selectdemo)
+    req(input$linelocation)
+    print("select selected demo changed")
+    print(input$selectdemo)
+    if (input$selectdemo=="Age"){
+      filter(tbl_age_geo,geo_name == input$linelocation)
+    }
+    else if (input$selectdemo=="Race"){
+      filter(tbl_race_geo,geo_name == input$linelocation)
+    }
+    else if (input$selectdemo=="Population"){
+      filter(tbl_pop_geo,geo_name == input$linelocation)
+    }
+    else{
+      filter(tbl_le_geo,geo_name == input$linelocation)
+      
+    }
+  })
+  
+  observeEvent(selectdemo(),{
+    print("select demo")
+    print(selectdemo())
+    output$profiledata = DT::renderDataTable({
+      datatable(selectdemo(),
+                rownames = F,
+                extensions = 'Buttons',
+                options = list(dom = 'Bt', 
+                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                               scrollX = TRUE))
+      #colnames=c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM"))
+      
+    })
+  })
 }
 
 shinyApp(body, server)
-#}
