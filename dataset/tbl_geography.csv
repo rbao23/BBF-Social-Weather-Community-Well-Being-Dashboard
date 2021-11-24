@@ -1471,13 +1471,13 @@
 "US24033807410","Census Tract 8074.10, Prince George's County, Maryland","Tract",NA
 "US53","Washington","State",NA
 "US24","Maryland","State",NA
-"US53077","Yakima County, Washington","County",NA
-"US53053","Pierce County, Washington","County",NA
-"US53033","King County, Washington","County",NA
-"US24005","Baltimore County, Maryland","County",NA
-"US24510","Baltimore city, Maryland","County",NA
-"US24033","Prince George's County, Maryland","County",NA
-"US24031","Montgomery County, Maryland","County",NA
+"US53077","Yakima County, Washington","County","Yakima, WA"
+"US53053","Pierce County, Washington","County","Seattle-Tacoma-Bellevue, WA"
+"US53033","King County, Washington","County","Seattle-Tacoma-Bellevue, WA"
+"US24005","Baltimore County, Maryland","County","Baltimore-Columbia-Towson, MD"
+"US24510","Baltimore city, Maryland","County","Baltimore-Columbia-Towson, MD"
+"US24033","Prince George's County, Maryland","County","Washington-Arlington-Alexandria, DC-VA-MD-WV"
+"US24031","Montgomery County, Maryland","County","Washington-Arlington-Alexandria, DC-VA-MD-WV"
 "ZC20601","ZCTA5 20601 MD","ZCTA",NA
 "ZC20602","ZCTA5 20602 MD","ZCTA",NA
 "ZC20603","ZCTA5 20603 MD","ZCTA",NA

@@ -27,7 +27,6 @@ library(viridis)
 library(ggplot2)
 library(shinycssloaders)
 
-library(zoo)
 library(DT)
 library("formattable")
 
@@ -126,7 +125,6 @@ test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")]
 
 
 
-
 ############################################### ui.R ##################################################
 
 body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -142,7 +140,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                selectInput("sex", "Sex:",choices=NULL,selected = NULL),
                                selectInput("race", "Race:",choices=NULL),
                                selectInput("age", "Age:",choices=NULL),
-                               selectInput("geo_level", "Geographic Level:",choices=NULL),
+                               selectInput("geo_level", "Geographic Scale:",choices=NULL),
                                selectInput("year", "Year:",choices=NULL),
                                #sliderInput("year_slider", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE)
                                h3("Select Location"),
@@ -393,7 +391,6 @@ server <- function(input,output,session) {
   output$mymap <- renderLeaflet({
     print("observe geo level change, change map")
     req(input$year)
-    
     f_data <- year()
     f_data$geo_id = substr(f_data$geo_id,3,nchar(f_data$geo_id))
     names(f_data)[1] <- 'GEOID'
@@ -408,10 +405,118 @@ server <- function(input,output,session) {
     # transfer to spatial dataset
     mapdata_merged_sf <-st_as_sf(mapdata_merged)
     pal_fun_num <- colorNumeric("Blues", NULL, n =7)
+    print("for pop up")
+    print(mapdata_merged_sf)
     #pal_fun_cat <- colorFactor("YlOrRd", NULL, n =7)
-    p_popup <- paste0("<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
-                      "<strong> Place: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
-                      "<strong> Total estimate </strong>", unique(mapdata_merged_sf$value))
+    
+    ##################### add pop up for data description #############################
+    if (unique(mapdata_merged_sf$variables) == "Percent Voted"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Percent of householder living alone"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Percent Insured Estimate"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Food insecurity rate"){
+      p_popup <- paste0("<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
+                        "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
+                        "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Metro area cost-burdened households (%)"){
+      p_popup <- paste0("<strong> Metro Area: </strong>", mapdata_merged_sf$metro_area,"<br/>",
+                        "<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
+                        "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
+                        "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%","<br/>",
+                        "<strong> Data Description: </strong>","County in the same metro area share the same data point")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Total number of household with internet subscription"){
+      total_state = sum(as.numeric(mapdata_merged_sf$value))
+      print(total_state)
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Children aged 3-4 enrolled in school (percent)"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Adjusted cohort graduation rate"){
+      total_state = sum(as.numeric(mapdata_merged_sf$value))
+      print(total_state)
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%","<br/>",
+                        "<strong> Data Description: </strong>","Adjusted cohort graduation rate is the number of students who graduate in four years or less with a  regular high school diploma divided by the number of students who form the adjusted-cohort.","<br/>","<br/>",
+                        mapdata_merged_sf$value, "% is average school graduation rate in ", mapdata_merged_sf$geo_name,", please click 'Map Data' page for details of graduation rate for each school.")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "National risk index score"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
+                        "<strong> Data Description: </strong>","<br/>",
+                        "The National Risk Index (NRI) is an online tool to help illustrate the nation's communities most 
+                        at risk of natural hazards. It leverages authoritative nationwide datasets and multiplies values for exposure, hazard frequency, and historic
+                        loss ratios to derive Expected Annual Loss for 18 natural hazards; and it combines this metric with Social Vulnerability and Community Resilience
+                        data to generate a unitless, normalized Risk Index score for every census tract and county in the United States.","<br/>","<br/>",
+                        "The NRI incorporates data for the following natural hazards: Avalanche, Coastal Flooding, Cold Wave, Drought, Earthquake, Hail, Heat Wave,
+                        Hurricane, Ice Storm, Landslide, Lightning, Riverine Flooding, Strong Wind, Tornado, Tsunami, Volcanic Activity, Wildfire, and Winter Weather.")
+    }
+    
+    else if (unique(mapdata_merged_sf$variables) == "County-level real gdp"){
+      total_state = sum(as.numeric(mapdata_merged_sf$value))
+      print(total_state)
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", as.numeric(mapdata_merged_sf$value),"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Gdp percent change from preceding period"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", as.numeric(mapdata_merged_sf$value),"%")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Hudper100"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
+                        "<strong> Data Description: </strong>","Hudper100 is HUD units per 100 ELI renters (=(HUD/Total)*100)")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Usdaper100"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>","USDAper100","<br/>",
+                        "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
+                        "<strong> Data Description: </strong>","USDAper100 is USDA units per 100 ELI renters (=(USDA/Total)*100)")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Native Analysis Value"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"<br/>",
+                        "<strong> Data Description: </strong>","Native Analysis Value of Emergency department visit rate per 1000 beneficiaries")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Jail Population Rate" | unique(mapdata_merged_sf$variables) == "Prison Population Rate"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value, " per 100,000 residents age 15-64")
+    }
+    else if (unique(mapdata_merged_sf$variables) == "Top-to-bottom ratio"){
+      p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
+                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"<br/>",
+                        "<strong> Data Description: </strong>","Ratio of top 1% income to bottom 99% income for all U.S. counties")
+    }
+    else{
+      p_popup <- paste0("<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
+                        "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
+                        "<strong> Total estimate </strong>", round(as.numeric(mapdata_merged_sf$value),2))
+    }
     req(input$linelocation)
     req(input$geo_level)
     req(input$line_state)
@@ -460,7 +565,7 @@ server <- function(input,output,session) {
         fillOpacity = 0.55,
         fillColor = ~pal_fun_num(as.numeric(value)), # set fill color with function from above and value
         popup = p_popup,
-        label = ~geo_name,
+        label = ~lapply(paste0(geo_name, "<br>", unique(mapdata_merged_sf$variables), ": ",round(as.numeric(value),2)),HTML),
         highlightOptions = highlightOptions(weight = 2,
                                             color = "white",
                                             fillOpacity = 0.7, 
