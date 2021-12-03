@@ -165,7 +165,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                           ".shiny-output-error:before { visibility: hidden; }"
                                ),
                                tabsetPanel(
-                                 id = "panels",
+                                 
                                  tabPanel("Map View", verbatimTextOutput("mapview"),
                                           fluidRow(column(width = 11, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
                                           fluidRow(column(width = 11, "Use the left panel to filter data,and click on the map for additional details. Please note that data are not currently
@@ -174,9 +174,16 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                           fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "55vh"))%>% withSpinner(color="#0dc5c1"))), 
+                                                                        div(class="outer",
+                                                                            fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))),
+                                                                            absolutePanel(id = "controls", class = "panel panel-default",
+                                                                                          top = 245, left = 1450, width = 260, fixed=TRUE,
+                                                                                          draggable = TRUE, height = "auto",
+                                                                                          tags$i(h4(textOutput("descriptiontitle"), style="color:#045a8d;text-align:center")),
+                                                                                          h5(textOutput("datadescription"),style="text-align:left"))),
+                                                                        #fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))), 
                                                                         fluidRow(column(width = 12, " ", style='padding:3px;')),
-                                                                        plotOutput("lineplot", height = "200px"), 
+                                                                        plotOutput("lineplot", height = "225px"), 
                                                                         div(actionButton("twitter_share",
                                                                                          label = "Share",
                                                                                          icon = icon("twitter"),
@@ -226,10 +233,10 @@ server <- function(input,output,session) {
     if (input$domain == "Resources: the tangible assets within a community"){
       s_domain = "Resources"
     }
-    else if (input$domain == "Connection: social and civic connection within a community)"){
+    else if (input$domain == "Connection: social and civic connection within a community"){
       s_domain = "Connection"
     }
-    else if (input$domain == "Opportunity: individual or household capacity to achieve goals)"){
+    else if (input$domain == "Opportunity: individual or household capacity to achieve goals"){
       s_domain = "Opportunity"
     }
     else {
@@ -241,13 +248,14 @@ server <- function(input,output,session) {
   
   observeEvent(domain(), {
     print("observe domain change,return subdomain choices")
-    print(input$domain)
     print("update subdomain choices")
     choice = sort(unique(domain()$subdomain))
-    new_list<-choice[! choice %in% c("Education Quality")]
-    choices = c(c("Education Quality"),new_list)
-    updateSelectInput(session=session,"subdomain",choices = choices)
-    print(choices)
+    if ("Education Quality" %in% choice){
+      new_list<-choice[! choice %in% c("Education Quality")]
+      choice = c(c("Education Quality"),new_list)
+    }
+    updateSelectInput(session=session,"subdomain",choices = choice)
+    print(choice)
   })
   
   subdomain <- reactive({
@@ -258,11 +266,12 @@ server <- function(input,output,session) {
   })
   
   observeEvent(subdomain(),{
-    #req(input$subdomain)
     print("observe subdomain change,return indicator choices")
+    print(subdomain())
     print(input$subdomain)
     print("update indicator choices")
     choices = sort(unique(subdomain()$indicator))
+    print(choices)
     updateSelectInput(session,"indicator",choices = choices)
     print(choices)
   })
@@ -390,31 +399,6 @@ server <- function(input,output,session) {
     filter(line_state(), geo_name == input$linelocation)
   })
   
-  #observeEvent({geo_level()},{
-  #print("observe geo_level")
-  #print(geo_level())
-  #print(geo_level()$year)
-  #choices = sort(unique(geo_level()$year))
-  #print("choices")
-  #print(choices)
-  #updateSliderInput(session,'year_slider', value=range(choices),
-  #                      min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
-  # })
-  
-  #year_slider <- reactive({
-  # req(input$year_slider)
-  #print("year changed")
-  #print(input$year_slider)
-  #filter(geo_level(), year == input$year_slider)
-  #})
-  
-  #observeEvent({
-  #geo_level()
-  #year()},{
-  #updateSliderInput(session,'yearslider', value=unique(year()$year),
-  #                   min = min(as.numeric(age()$year)), max = max(as.numeric(age()$year)), step = 1)
-  # }) 
-  
   output$mymap <- renderLeaflet({
     print("observe geo level change, change map")
     req(input$year)
@@ -435,6 +419,14 @@ server <- function(input,output,session) {
     print("for pop up")
     print(mapdata_merged_sf)
     #pal_fun_cat <- colorFactor("YlOrRd", NULL, n =7)
+    
+    output$descriptiontitle <- renderText({ 
+      paste0("")
+    })
+    output$datadescription <- renderText({ 
+      paste0("")
+    })
+    pal_fun_num <- colorBin("Blues", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     
     ##################### add pop up for data description #############################
     if (unique(mapdata_merged_sf$variables) == "Percent Voted"){
@@ -465,9 +457,14 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Metro Area: </strong>", mapdata_merged_sf$metro_area,"<br/>",
                         "<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                         "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
-                        "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%","<br/>",
-                        "<strong> Data Description: </strong>","County in the same metro area share the same data point")
-      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+                        "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%")
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("The data we use is Metro area cost-burdened households (%). County in the same metro area share the same data point")
+      })
+      pal_fun_num <- colorBin("PuBu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     else if (unique(mapdata_merged_sf$variables) == "Total number of household with internet subscription"){
       total_state = sum(as.numeric(mapdata_merged_sf$value))
@@ -475,6 +472,8 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
+      
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "Children aged 3-4 enrolled in school (percent)"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
@@ -486,24 +485,33 @@ server <- function(input,output,session) {
       print(total_state)
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
-                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%","<br/>",
-                        "<strong> Data Description: </strong>","Adjusted cohort graduation rate is the number of students who graduate in four years or less with a  regular high school diploma divided by the number of students who form the adjusted-cohort.","<br/>","<br/>",
-                        mapdata_merged_sf$value, "% is average school graduation rate in ", mapdata_merged_sf$geo_name,", please click 'Map Data' page for details of graduation rate for each school.")
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("Adjusted cohort graduation rate is the number of students who graduate in four years or less with a  regular high school diploma divided by the number of students who form the adjusted-cohort.
+               please click 'Map Data' page for details of graduation rate for each school.")
+      })
       pal_fun_num <- colorBin("BuPu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
       
     }
     else if (unique(mapdata_merged_sf$variables) == "National risk index score"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
-                        "<strong> Total estimate: </strong>", round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
-                        "<strong> Data Description: </strong>","<br/>",
-                        "The National Risk Index (NRI) is an online tool to help illustrate the nation's communities most 
-                        at risk of natural hazards. It leverages authoritative nationwide datasets and multiplies values for exposure, hazard frequency, and historic
-                        loss ratios to derive Expected Annual Loss for 18 natural hazards; and it combines this metric with Social Vulnerability and Community Resilience
-                        data to generate a unitless, normalized Risk Index score for every census tract and county in the United States.","<br/>","<br/>",
-                        "The NRI incorporates data for the following natural hazards: Avalanche, Coastal Flooding, Cold Wave, Drought, Earthquake, Hail, Heat Wave,
-                        Hurricane, Ice Storm, Landslide, Lightning, Riverine Flooding, Strong Wind, Tornado, Tsunami, Volcanic Activity, Wildfire, and Winter Weather.")
-      pal_fun_num <- colorBin("Reds", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+                        "<strong> Total estimate: </strong>", round(as.numeric(mapdata_merged_sf$value),2))
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("The National Risk Index (NRI) is an online tool to help illustrate the nation's communities most at risk of natural hazards. 
+        It leverages authoritative nationwide datasets and multiplies values for exposure, hazard frequency, and historic loss ratios to derive
+        Expected Annual Loss for 18 natural hazards; and it combines this metric with Social Vulnerability and Community Resilience
+               data to generate a unitless, normalized Risk Index score for every census tract and county in the United States.","<br/>","<br/>",
+               "The NRI incorporates data for the following natural hazards: Avalanche, Coastal Flooding, Cold Wave, Drought, Earthquake, Hail, Heat Wave,
+               Hurricane, Ice Storm, Landslide, Lightning, Riverine Flooding, Strong Wind, Tornado, Tsunami, Volcanic Activity, Wildfire, and Winter Weather.")
+      })
+      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     
     else if (unique(mapdata_merged_sf$variables) == "County-level real gdp"){
@@ -521,8 +529,13 @@ server <- function(input,output,session) {
     else if (unique(mapdata_merged_sf$variables) == "Hudper100"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
-                        "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
-                        "<strong> Data Description: </strong>","Hudper100 is HUD units per 100 ELI renters (=(HUD/Total)*100)")
+                        "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2))
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("Hudper100 is HUD units per 100 ELI renters (=(HUD/Total)*100)")
+      })
       
     }
     else if (unique(mapdata_merged_sf$variables) == "Usdaper100"){
@@ -530,13 +543,25 @@ server <- function(input,output,session) {
                         "<strong> Social Weather Index: </strong>","USDAper100","<br/>",
                         "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
                         "<strong> Data Description: </strong>","USDAper100 is USDA units per 100 ELI renters (=(USDA/Total)*100)")
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("USDAper100 is USDA units per 100 ELI renters (=(USDA/Total)*100)")
+      })
       
     }
     else if (unique(mapdata_merged_sf$variables) == "Native Analysis Value"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
-                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"<br/>",
-                        "<strong> Data Description: </strong>","Native Analysis Value of Emergency department visit rate per 1000 beneficiaries")
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value)
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("The Native Analysis Value is emergency department visit rate per 1000 beneficiaries")
+      })
+      
       pal_fun_num <- colorBin("Purples", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
       
     }
@@ -550,8 +575,13 @@ server <- function(input,output,session) {
     else if (unique(mapdata_merged_sf$variables) == "Top-to-bottom ratio"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
-                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"<br/>",
-                        "<strong> Data Description: </strong>","Ratio of top 1% income to bottom 99% income for all U.S. counties")
+                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value)
+      output$descriptiontitle <- renderText({ 
+        paste0("Data Description")
+      })
+      output$datadescription <- renderText({ 
+        paste0("Ratio of top 1% income to bottom 99% income for all U.S. counties")
+      })
       pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
       
     }
@@ -585,7 +615,7 @@ server <- function(input,output,session) {
     }
     if(input$line_state =="Washington"){
       if(input$geo_level == "State"){
-        zoom = 5
+        zoom = 6
       }
       else if (input$geo_level == 'County' | input$geo_level == 'Tract'){
         zoom = 7.5
@@ -621,6 +651,12 @@ server <- function(input,output,session) {
                                             fillOpacity = 0.7, 
                                             opacity =1,
                                             bringToFront = T)) %>% 
+      addEasyButton(
+        button = easyButton(
+          icon = 'fa-info',
+          title="Data Description",
+          onClick = JS('function(btn, map){ alert("sometext"); }')
+        ) )%>%
       addLegend("bottomright",  # location
                 pal = pal_fun_num,     # palette function
                 values = ~as.numeric(value),
