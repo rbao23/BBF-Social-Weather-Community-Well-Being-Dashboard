@@ -17,7 +17,7 @@ library(magrittr)
 library(tidyverse)
 library(leaflet)
 library(tigris)
-#options(tigris_use_cache = TRUE)
+options(tigris_use_cache = TRUE)
 
 library(sf)
 library(classInt)
@@ -29,6 +29,8 @@ library(ggplot2)
 
 library(DT)
 library(shinycssloaders)
+library(plotly)
+
 
 
 #library(shinydashboard)
@@ -148,7 +150,6 @@ test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")]
 
 
 
-
 ############################################### ui.R ##################################################
 
 body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -156,8 +157,13 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   tabPanel("Interactive Map",
                            sidebarLayout(
                              sidebarPanel(
+                               h3("Select Location"),
+                               selectInput("line_state", "State:",choices=c("Washington","Maryland")),
                                h3("Select Map Dataset"),
-                               selectInput("domain","Domain:",choices=sort(unique(social_index_dataset$domain)),selected = NULL),
+                               selectInput("domain","Domain:",choices=c("Resources: the tangible assets within a community",
+                                                                        "Connection: social and civic connection within a community",
+                                                                        "Opportunity: individual or household capacity to achieve goals",
+                                                                        "Structural Equity: the fairness of a community's systems and institutions"),selected = NULL),
                                selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
                                selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
                                selectInput("variable_name", "Variable:", choices=NULL,selected = NULL),
@@ -165,11 +171,9 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                selectInput("race", "Race:",choices=NULL),
                                selectInput("age", "Age:",choices=NULL),
                                selectInput("geo_level", "Geographic Scale:",choices=NULL),
+                               selectInput("linelocation", "Geographic Area:",choices=NULL),
                                selectInput("year", "Year:",choices=NULL),
-                               #sliderInput("year_slider", "Select Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE)
-                               h3("Select Location"),
-                               selectInput("line_state", "State:",choices=c("Washington","Maryland")),
-                               selectInput("linelocation", "Location:",choices=NULL)
+                               width = 3
                              ),
                              mainPanel(
                                tags$style(type="text/css",
@@ -179,49 +183,49 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                tabsetPanel(
                                  id = "panels",
                                  tabPanel("Map View", verbatimTextOutput("mapview"),
-                                          fluidRow(column(11, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
+                                          fluidRow(column(width = 11, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
+                                          fluidRow(column(width = 11, "Use the left panel to filter data,and click on the map for additional details. Please note that data are not currently
+                                                  available for every county in every year, and estimates will change as we process more data.", 
+                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                          fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                                      background: #48C9B0;
                                                      border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                        #sliderInput("yearslider", "Select Mapping Year", value =1990, min = 1990, max=2021, step=1,ticks = FALSE, animate=TRUE),
-                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "65vh"))%>% withSpinner(color="#0dc5c1"))), 
+                                                                        fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "55vh"))%>% withSpinner(color="#0dc5c1"))), 
                                                                         fluidRow(column(width = 12, " ", style='padding:3px;')),
-                                                                        plotOutput("lineplot", height = "250px"), 
-                                                                        fluidRow(column(width = 12, "Welcome to the Social Weather Map! Use the left panel to filter data, 
-                                                  and click on the map for additional details. Please note that data are not currently
-                                                  available for every county in every year, and estimates will change as we process more data.", 
-                                                                                        style='font-family:Avenir, Helvetica;font-size:16;text-align:center'))
+                                                                        plotOutput("lineplot", height = "200px"), 
+                                                                        div(actionButton("twitter_share",
+                                                                                     label = "Share",
+                                                                                     icon = icon("twitter"),
+                                                                                     onclick = sprintf("window.open('%s')", "https://twitter.com/intent/tweet?text=Hello%20world&url=https://shiny.rstudio.com/gallery/widget-gallery.html/"),
+                                                                                     style='padding:6px; font-size:90%'),
+                                                                            style = "display:inline-block; float:right"),
                                           )))),
                                  tabPanel("Map Data", verbatimTextOutput("viewdata"),
-                                          h2("Selected Social Weather Index Data Table"),
+                                          fluidRow(column(width = 11, h3(textOutput("mapdatatitle"),style='text-align:center'))),
+                                          fluidRow(column(width = 11, "Use the left panel to filter map data.", 
+                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           DT::dataTableOutput("mytable")),
                                  tabPanel("Profile View", verbatimTextOutput("locprofview"),
-                                          textOutput("text"),
-                                          tags$head(tags$style("#text{color: Black;
-                                          font-size: 25px;
-                                          font-style: Bold;}")
-                                          ),
-                                          fluidRow(column(6, sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=animationOptions(
-                                            interval = 1000,
-                                            loop = TRUE,
-                                            playButton = NULL,
-                                            pauseButton = NULL)),
-                                            plotOutput("raceplot")),
-                                            column(6, sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=animationOptions(
-                                              interval = 1000,
-                                              loop = TRUE,
-                                              playButton = NULL,
-                                              pauseButton = NULL)),
-                                              plotOutput("ageplot"))),
-                                          fluidRow(column(6, plotOutput("popplot")),
-                                                   column(6, plotOutput("leplot")))
+                                          fluidRow(column(width = 11, h3(textOutput("text"),style='text-align:center'))),
+                                          fluidRow(column(width = 11, "Mouse over the plots to see details and click camera icon to download plot.", 
+                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                          tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
+                                          fluidRow(column(6, div(style = "margin: auto; width: 80%",
+                                                                 sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
+                                                          plotlyOutput("raceplot")),
+                                                   column(6, div(style = "margin: auto; width: 80%",
+                                                                 sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
+                                                          plotlyOutput("ageplot"))),
+                                          fluidRow(column(6, plotlyOutput("popplot")),
+                                                   column(6, 
+                                                          #h5(textOutput("unavailable"),style='text-align:center;padding:100px;'),
+                                                          plotlyOutput("leplot")))
                                  ),
                                  tabPanel("Profile Data", verbatimTextOutput("Profdata"),
-                                          textOutput("demogeotext"),
-                                          tags$head(tags$style("#demogeotext{color: Black;
-                                          font-size: 25px;
-                                          font-style: Bold;}")
-                                          ),
-                                          selectInput("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race")),
+                                          fluidRow(column(width = 11, h3(textOutput("demogeotext"),style='text-align:center'))),
+                                          fluidRow(column(width = 11, "Use the left panel to filter 'State','Geographic Scale' and 'Geographic Area' to get profile data.", 
+                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                          radioButtons("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race"),inline = TRUE),
                                           DT::dataTableOutput("profiledata"),
                                           DT::dataTableOutput("allprofiledata"))
                                  
@@ -234,16 +238,30 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 server <- function(input,output,session) {
   domain <- reactive({
     print("domain changed")
-    #req(input$domain)
     print(input$domain)
-    filter(social_index_dataset, social_index_dataset$domain==input$domain)
+    if (input$domain == "Resources: the tangible assets within a community"){
+      s_domain = "Resources"
+    }
+    else if (input$domain == "Connection: social and civic connection within a community)"){
+      s_domain = "Connection"
+    }
+    else if (input$domain == "Opportunity: individual or household capacity to achieve goals)"){
+      s_domain = "Opportunity"
+    }
+    else {
+      s_domain="Structural Equity"
+    }
+    print(s_domain)
+    filter(social_index_dataset, social_index_dataset$domain==s_domain)
   })
   
   observeEvent(domain(), {
     print("observe domain change,return subdomain choices")
     print(input$domain)
     print("update subdomain choices")
-    choices = sort(unique(domain()$subdomain))
+    choice = sort(unique(domain()$subdomain))
+    new_list<-choice[! choice %in% c("Education Quality")]
+    choices = c(c("Education Quality"),new_list)
     updateSelectInput(session=session,"subdomain",choices = choices)
     print(choices)
   })
@@ -338,7 +356,8 @@ server <- function(input,output,session) {
     print("observe age change,return geo_level choices")
     print(input$age)
     print("update geo_level choices")
-    choices = sort(unique(age()$geo_level))
+    
+    choices = sort(unique(age()$geo_level), decreasing=TRUE)
     updateSelectInput(session,"geo_level",choices = choices)
     print(choices)
   })
@@ -443,16 +462,20 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+      pal_fun_num <- colorBin("GnBu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "Percent Insured Estimate"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+      pal_fun_num <- colorBin("Purples", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     else if (unique(mapdata_merged_sf$variables) == "Food insecurity rate"){
       p_popup <- paste0("<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                         "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                         "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%")
+      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     else if (unique(mapdata_merged_sf$variables) == "Metro area cost-burdened households (%)"){
       p_popup <- paste0("<strong> Metro Area: </strong>", mapdata_merged_sf$metro_area,"<br/>",
@@ -460,6 +483,7 @@ server <- function(input,output,session) {
                         "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                         "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%","<br/>",
                         "<strong> Data Description: </strong>","County in the same metro area share the same data point")
+      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     else if (unique(mapdata_merged_sf$variables) == "Total number of household with internet subscription"){
       total_state = sum(as.numeric(mapdata_merged_sf$value))
@@ -481,6 +505,8 @@ server <- function(input,output,session) {
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%","<br/>",
                         "<strong> Data Description: </strong>","Adjusted cohort graduation rate is the number of students who graduate in four years or less with a  regular high school diploma divided by the number of students who form the adjusted-cohort.","<br/>","<br/>",
                         mapdata_merged_sf$value, "% is average school graduation rate in ", mapdata_merged_sf$geo_name,", please click 'Map Data' page for details of graduation rate for each school.")
+      pal_fun_num <- colorBin("BuPu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "National risk index score"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
@@ -493,6 +519,7 @@ server <- function(input,output,session) {
                         data to generate a unitless, normalized Risk Index score for every census tract and county in the United States.","<br/>","<br/>",
                         "The NRI incorporates data for the following natural hazards: Avalanche, Coastal Flooding, Cold Wave, Drought, Earthquake, Hail, Heat Wave,
                         Hurricane, Ice Storm, Landslide, Lightning, Riverine Flooding, Strong Wind, Tornado, Tsunami, Volcanic Activity, Wildfire, and Winter Weather.")
+      pal_fun_num <- colorBin("Reds", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     
     else if (unique(mapdata_merged_sf$variables) == "County-level real gdp"){
@@ -512,35 +539,50 @@ server <- function(input,output,session) {
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
                         "<strong> Data Description: </strong>","Hudper100 is HUD units per 100 ELI renters (=(HUD/Total)*100)")
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "Usdaper100"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>","USDAper100","<br/>",
                         "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
                         "<strong> Data Description: </strong>","USDAper100 is USDA units per 100 ELI renters (=(USDA/Total)*100)")
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "Native Analysis Value"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"<br/>",
                         "<strong> Data Description: </strong>","Native Analysis Value of Emergency department visit rate per 1000 beneficiaries")
+      pal_fun_num <- colorBin("Purples", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "Jail Population Rate" | unique(mapdata_merged_sf$variables) == "Prison Population Rate"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value," per 100,000 residents age 15-64")
+      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      
     }
     else if (unique(mapdata_merged_sf$variables) == "Top-to-bottom ratio"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"<br/>",
                         "<strong> Data Description: </strong>","Ratio of top 1% income to bottom 99% income for all U.S. counties")
+      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      
     }
     else{
       p_popup <- paste0("<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                         "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                         "<strong> Total estimate </strong>", round(as.numeric(mapdata_merged_sf$value),2))
     }
+    if (unique(mapdata_merged_sf$variables) == "Violent crimes per 100,000"){
+      pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+    }  
+    else if (unique(mapdata_merged_sf$variables) == "Median air quality"){
+      pal_fun_num <- colorBin("YlGn", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+    }
+    
     req(input$linelocation)
     req(input$geo_level)
     req(input$line_state)
@@ -559,7 +601,7 @@ server <- function(input,output,session) {
     }
     if(input$line_state =="Washington"){
       if(input$geo_level == "State"){
-        zoom = 5.5
+        zoom = 5
       }
       else if (input$geo_level == 'County' | input$geo_level == 'Tract'){
         zoom = 7.5
@@ -580,7 +622,7 @@ server <- function(input,output,session) {
       }
     }
     leaflet(mapdata_merged_sf) %>%
-      addProviderTiles(provider = "CartoDB") %>% 
+      addProviderTiles(provider = "CartoDB") %>%
       addPolygons(
         color = "black",
         weight = 1,
@@ -633,6 +675,11 @@ server <- function(input,output,session) {
       ggtitle(paste0(unique(lineloc$variables), " Trend Line Comparison"))
   })
   
+  
+  output$mapdatatitle <- renderText({ 
+    paste0(input$linelocation," Social Weather Index Data Table")
+  })
+  
   output$mytable = DT::renderDataTable({
     x<-year()
     names(x)[5] <- 'values'
@@ -658,7 +705,7 @@ server <- function(input,output,session) {
   
   #######################location profile view########################
   output$text <- renderText({ 
-    paste0(input$linelocation," Demographics:")
+    paste0(input$linelocation," Demographics")
   })
   
   racedata <- reactive({
@@ -680,23 +727,45 @@ server <- function(input,output,session) {
     filter(filter(racedata(), year == input$yearperiod),label != "estimate_total_population")
   })
   
-  
-  output$raceplot <- renderPlot({
+  output$raceplot <- renderPlotly({
     print("raceplot")
     racedataset <- yearperiod()
+    all_race = sum(as.numeric(racedataset$estimate))
+    print("allrace")
+    print(all_race)
+    hsize=2
+    # racedataset$fraction = as.numeric(racedataset$estimate)/sum(as.numeric(racedataset$estimate))
+    # racedataset = racedataset[order(racedataset$fraction), ]
+    # racedataset$ymax = cumsum(racedataset$fraction)
+    # racedataset$ymin = c(0, head(racedataset$ymax, n=-1))
     
-    pie<-ggplot(racedataset, aes(x = "", y=as.numeric(estimate), fill = factor(label))) + 
-      geom_bar(width = 1, stat = "identity") +
-      theme(axis.line = element_blank(), 
-            plot.title = element_text(hjust=0.5)) + 
-      labs(fill="Class", 
-           x=NULL, 
-           y=NULL, 
-           title="Pie Chart of Race")
+    color_r = c('rgb(253, 231, 37)','rgb(160, 218, 57)','rgb(74, 193, 109)',' rgb(31, 161, 135)','rgb(39, 127, 142)', 'rgb(54, 92, 141)', 'rgb(70, 50, 126)','rgb(68, 1, 84)')
+    fig <- racedataset %>% plot_ly(labels = ~ factor(label), values = ~as.numeric(estimate),
+                                   marker = list(colors = color_r,
+                                                 line = list(color = '#FFFFFF', width = 1)))
+    fig <- fig %>% add_pie(hole = 0.6)
+    fig <- fig %>% layout(title = "Population by Race",  showlegend = F,
+                          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+    fig
+    #raceplotly<-ggplot(racedataset, aes(fill = factor(label), ymax = ymax, ymin = ymin, xmax = 100, xmin = 80)) +
+    # geom_rect()+
+    #coord_polar(theta = "y")+
+    #xlim(c(20, 100)) +
+    #geom_label_repel(aes(label = paste(round(fraction*100,2),"%"), x = 100,y = (ymin + ymax)/2),inherit.aes = F, show.legend = F, size = 5)+
+    #theme(panel.background = element_rect(fill = "white"),
+    #panel.grid = element_blank(),
+    # axis.text = element_blank(),
+    #axis.title = element_blank(),
+    # axis.ticks = element_blank()) +
+    #scale_fill_viridis(discrete = TRUE)+
+    # labs(fill="Race", 
+    # x=NULL, 
+    # y=NULL, 
+    # title="Ring Plot of Race")
     
-    pie + coord_polar(theta = "y", start=0)+
-      scale_fill_viridis(discrete = TRUE)+
-      theme(panel.background = element_blank())
+    # ggplotly(raceplotly)
+    
   })
   
   ############age
@@ -719,19 +788,41 @@ server <- function(input,output,session) {
     filter(agedata(), year == input$yearperiod2)
   })
   
-  output$ageplot <- renderPlot({
+  output$ageplot <- renderPlotly({
     print("ageplot")
     agedataset <- yearperiod2()
+    all_age <- sum(as.numeric(agedataset$estimate))
+    
     agedataset$label <- factor(agedataset$label, levels = agedataset$label)
     print(agedataset)
-    ggplot(agedataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
-      coord_flip() +
-      scale_fill_continuous(type = "viridis",name = "Number of People")+theme(legend.position="right")+
-      geom_bar(position="stack",stat="identity")+
-      xlab("Age Group") +
-      ylab("Number of People")+
-      ggtitle("Bar Chart of Age")+
-      theme(panel.background = element_blank())
+    
+    color_a = c('rgb(253, 231, 37)', 'rgb(216, 226, 25)', 'rgb(176, 221, 47)','rgb(137, 213, 72)','rgb(101, 203, 94)','rgb(70, 192, 111)','rgb(46, 179, 124)', 'rgb(33, 165, 133)',
+                'rgb(31, 151, 139)', 'rgb(35, 137, 142)', 'rgb(41, 123, 142)','rgb(46, 109, 142)','rgb(53, 94, 141)', 'rgb(61, 78, 138)','rgb(67, 61, 132)', 'rgb(71, 42, 122)',
+                'rgb(72, 23, 105)','rgb(68, 1, 84)')
+    fig_a <- plot_ly(agedataset, x = ~as.numeric(estimate),y=agedataset$label, type = 'bar', orientation = 'h',
+                     text = paste0(round(as.numeric(agedataset$estimate)/all_age*100,2),"%"), textposition = 'auto',
+                     marker = list(color = color_a))
+    
+    fig_a <- fig_a %>% layout(title = "Population by Age Group",  showlegend = F,
+                              xaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+                              yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+                              showlegend = TRUE)
+    fig_a
+    #-ggplot(agedataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
+    # coord_flip() +
+    # scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+theme(legend.position="right")+
+    # geom_bar(position="stack",stat="identity")+
+    # scale_y_continuous(labels = scales::comma) +
+    # xlab("Age Group") +
+    # ylab("Number of People")+
+    # ggtitle("Bar Chart of Age")+
+    # geom_col(position = 'dodge') + 
+    # geom_text(
+    #  aes(label=paste0(round(as.numeric(estimate)/all_age*100,2),"%"), group=1),
+    #  position = position_dodge(width = .9),    # move to center of bars
+    #  hjust = 0    # nudge above top of bar
+    # )+
+    # theme(panel.background = element_blank())
   })
   
   
@@ -740,16 +831,29 @@ server <- function(input,output,session) {
     filter(tbl_pop_geo,geo_name == input$linelocation)
   })
   
-  output$popplot <- renderPlot({
+  output$popplot <- renderPlotly({
     print("poplot")
     popdataset <- popdata()
     print(popdataset)
-    ggplot(popdataset, aes(x=as.factor(year), y = as.numeric(estimate),fill= as.numeric(estimate)))+
-      geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People")+
-      xlab("Year") +
-      ylab("Number of People")+
-      ggtitle("Bar Chart of Population")+
-      theme(panel.background = element_blank())
+    
+    color_p = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
+                'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
+    fig_p <- plot_ly(popdataset, x = ~year,y=popdataset$estimate, type = 'bar',
+                     marker = list(color = color_p))
+    
+    fig_p <- fig_p %>% layout(title = "Population by Year",  showlegend = F,
+                              xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
+                              yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+                              showlegend = TRUE)
+    fig_p
+    
+    #ggplot(popdataset, aes(x=as.factor(year), y = as.numeric(estimate),fill= as.numeric(estimate)))+
+    # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
+    #scale_y_continuous(labels = scales::comma) +
+    #xlab("Year") +
+    #ylab("Number of People")+
+    #ggtitle("Bar Chart of Population")+
+    #theme(panel.background = element_blank())
   })
   
   ############le
@@ -757,20 +861,45 @@ server <- function(input,output,session) {
     filter(tbl_le_geo,geo_name == input$linelocation)
   })
   
-  output$leplot <- renderPlot({
-    print("poplot")
-    ledataset <- ledata()
-    print(ledataset)
-    ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
-      geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People")+
-      xlab("Year") +
-      ylab("Number of People")+
-      ggtitle("Bar Chart of Life Expectancy")+
-      theme(panel.background = element_blank())
+  observeEvent(ledata(),{
+    ledata<-ledata()
+    print("ledata nrow")
+    print(ledata)
+    if (nrow(ledata)!=1){
+      output$unavailable <- renderText({ 
+        paste0("Currently no life expectancy data available")
+      })
+    }
+    else{
+      output$leplot <- renderPlotly({
+        print("poplot")
+        ledataset <- ledata()
+        print(ledataset)
+        
+        color_l = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
+                    'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
+        fig_l <- plot_ly(ledataset, x = ~year,y=ledataset$estimate, type = 'bar',
+                         marker = list(color = color_l))
+        
+        fig_l <- fig_l %>% layout(title = "Life Expectancy by Year",  showlegend = F,
+                                  xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
+                                  yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+                                  showlegend = TRUE)
+        fig_l
+        
+        #ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
+        # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
+        #scale_y_continuous(labels = scales::comma) +
+        # xlab("Year") +
+        #ylab("Number of People")+
+        #ggtitle("Bar Chart of Life Expectancy")+
+        #theme(panel.background = element_blank())
+      })
+    }
   })
   ##############profile data##################
   output$demogeotext <- renderText({ 
-    paste0(input$linelocation)
+    paste0(input$linelocation,"Demograhics Data Table")
   })
   
   selectdemo <- reactive({
