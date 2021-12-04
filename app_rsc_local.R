@@ -167,8 +167,8 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                tabsetPanel(
                                  
                                  tabPanel("Map View", verbatimTextOutput("mapview"),
-                                          fluidRow(column(width = 11, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
-                                          fluidRow(column(width = 11, "Use the left panel to filter data,and click on the map for additional details. Please note that data are not currently
+                                          fluidRow(column(width = 12, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
+                                          fluidRow(column(width = 12, "Use the left panel to filter data,and click on the map for additional details. Please note that data are not currently
                                                   available for every county in every year, and estimates will change as we process more data.", 
                                                           style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
@@ -177,7 +177,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                                                         div(class="outer",
                                                                             fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))),
                                                                             absolutePanel(id = "controls", class = "panel panel-default",
-                                                                                          top = 245, left = 1450, width = 260, fixed=TRUE,
+                                                                                          top = 245, left = 1400, width = 260, fixed=TRUE,
                                                                                           draggable = TRUE, height = "auto",
                                                                                           tags$i(h4(textOutput("descriptiontitle"), style="color:#045a8d;text-align:center")),
                                                                                           h5(textOutput("datadescription"),style="text-align:left"))),
@@ -192,13 +192,13 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                                                             style = "display:inline-block; float:right"),
                                           )))),
                                  tabPanel("Map Data", verbatimTextOutput("viewdata"),
-                                          fluidRow(column(width = 11, h3(textOutput("mapdatatitle"),style='text-align:center'))),
-                                          fluidRow(column(width = 11, "Use the left panel to filter map data.", 
+                                          fluidRow(column(width = 12, h3(textOutput("mapdatatitle"),style='text-align:center'))),
+                                          fluidRow(column(width = 12, "Use the left panel to filter map data.", 
                                                           style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           DT::dataTableOutput("mytable")),
                                  tabPanel("Profile View", verbatimTextOutput("locprofview"),
-                                          fluidRow(column(width = 11, h3(textOutput("text"),style='text-align:center'))),
-                                          fluidRow(column(width = 11, "Mouse over the plots to see details and click camera icon to download plot.", 
+                                          fluidRow(column(width = 12, h3(textOutput("text"),style='text-align:center'))),
+                                          fluidRow(column(width = 12, "Use the left panel to filter 'State','Geographical Scale' and 'Geographic Area' for profile view. Mouse over the plots to see details and click camera icon to download plot.",
                                                           style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
                                           fluidRow(column(6, div(style = "margin: auto; width: 80%",
@@ -651,12 +651,6 @@ server <- function(input,output,session) {
                                             fillOpacity = 0.7, 
                                             opacity =1,
                                             bringToFront = T)) %>% 
-      addEasyButton(
-        button = easyButton(
-          icon = 'fa-info',
-          title="Data Description",
-          onClick = JS('function(btn, map){ alert("sometext"); }')
-        ) )%>%
       addLegend("bottomright",  # location
                 pal = pal_fun_num,     # palette function
                 values = ~as.numeric(value),
@@ -714,12 +708,15 @@ server <- function(input,output,session) {
     datatable(y,
               rownames = F,
               extensions = 'Buttons',
-              options = list(dom = 'Bt', 
-                             buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
-                             scrollX = TRUE),
+              options = list(paging = TRUE,
+                             scrollX=TRUE, 
+                             ordering = TRUE,
+                             dom = 'Bfrtip',
+                             buttons = c('copy', 'csv', 'excel', 'pdf'),
+                             pageLength=11, 
+                             lengthMenu=c(5,10,15)),
               colnames=c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM"))
     
-    #options = list(pageLength=50, scrollX='400px')
   })
   
   
@@ -751,13 +748,12 @@ server <- function(input,output,session) {
     print("raceplot")
     racedataset <- yearperiod()
     all_race = sum(as.numeric(racedataset$estimate))
-    print("allrace")
-    print(all_race)
-    hsize=2
     # racedataset$fraction = as.numeric(racedataset$estimate)/sum(as.numeric(racedataset$estimate))
     # racedataset = racedataset[order(racedataset$fraction), ]
     # racedataset$ymax = cumsum(racedataset$fraction)
     # racedataset$ymin = c(0, head(racedataset$ymax, n=-1))
+  
+    
     
     color_r = c('rgb(253, 231, 37)','rgb(160, 218, 57)','rgb(74, 193, 109)',' rgb(31, 161, 135)','rgb(39, 127, 142)', 'rgb(54, 92, 141)', 'rgb(70, 50, 126)','rgb(68, 1, 84)')
     fig <- racedataset %>% plot_ly(labels = ~ factor(label), values = ~as.numeric(estimate),
@@ -828,21 +824,24 @@ server <- function(input,output,session) {
                               yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
                               showlegend = TRUE)
     fig_a
-    #-ggplot(agedataset, aes(x = label, y =as.numeric(estimate),fill=as.numeric(estimate)))+
-    # coord_flip() +
-    # scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+theme(legend.position="right")+
-    # geom_bar(position="stack",stat="identity")+
-    # scale_y_continuous(labels = scales::comma) +
-    # xlab("Age Group") +
-    # ylab("Number of People")+
-    # ggtitle("Bar Chart of Age")+
-    # geom_col(position = 'dodge') + 
-    # geom_text(
-    #  aes(label=paste0(round(as.numeric(estimate)/all_age*100,2),"%"), group=1),
-    #  position = position_dodge(width = .9),    # move to center of bars
-    #  hjust = 0    # nudge above top of bar
-    # )+
-    # theme(panel.background = element_blank())
+    
+    #ageplotly<-ggplot(agedataset, aes(x = label, y =as.numeric(estimate)))+
+     #coord_flip() +
+     #scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+theme(legend.position="right")+
+     #geom_bar(position="stack",stat="identity")+
+     #scale_y_continuous(labels = scales::comma) +
+     #xlab("Age Group") +
+     #ylab("Number of People")+
+     #ggtitle("Population by Age")+
+     #geom_col(position = 'dodge') + 
+     #geom_text(
+    #  aes(label=paste0(percentage,"%"), group=1),
+     # position = position_dodge(width = .9),    # move to center of bars
+      #hjust = 0    # nudge above top of bar
+    #)+
+    #theme(panel.background = element_blank())
+    
+    #ggplotly(ageplotly)
   })
   
   
@@ -919,7 +918,7 @@ server <- function(input,output,session) {
   })
   ##############profile data##################
   output$demogeotext <- renderText({ 
-    paste0(input$linelocation,"Demograhics Data Table")
+    paste0(input$linelocation," Demograhics Data Table")
   })
   
   selectdemo <- reactive({
@@ -949,11 +948,13 @@ server <- function(input,output,session) {
       datatable(selectdemo(),
                 rownames = F,
                 extensions = 'Buttons',
-                options = list(dom = 'Bt', 
-                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
-                               scrollX = TRUE))
-      #colnames=c("domain","subdomain","indicator","variables","sex","race","age","year","value","geo_name","NCESSCH","SCHNAM"))
-      
+                options = list(paging = TRUE,
+                               scrollX=TRUE, 
+                               ordering = TRUE,
+                               dom = 'Bfrtip',
+                               buttons = c('copy', 'csv', 'excel', 'pdf'),
+                               pageLength=19, 
+                               lengthMenu=c(5,10,15)))
     })
   })
 }
