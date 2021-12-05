@@ -129,10 +129,6 @@ test_area <- bind_rows(test_tracts,test_counties,test_states)
 names(test_zcta)[1] <- 'GEOID'
 test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")])
 
-#test = test %>% 
-  #mutate(geom = gsub('()\n', '', geometry))%>% 
-  #separate(col = Geom, into = c('Latitude', 'Longitude '), sep = '\s')
-
 
 ############################################### ui.R ##################################################
 
@@ -141,8 +137,11 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   tabPanel("Interactive Map",
                            sidebarLayout(
                              sidebarPanel(
+                               tags$i(h5("Note: Geographic scale and area might change after selecting map datset", style="color:#045a8d;text-align:left")),
                                h3("Select Location"),
                                selectInput("line_state", "State:",choices=c("Washington","Maryland")),
+                               selectInput("geo_level", "Geographic Scale:",choices=NULL),
+                               selectInput("linelocation", "Geographic Area:",choices=NULL),
                                h3("Select Map Dataset"),
                                selectInput("domain","Domain:",choices=c("Resources: the tangible assets within a community",
                                                                         "Connection: social and civic connection within a community",
@@ -154,8 +153,6 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                selectInput("sex", "Sex:",choices=NULL,selected = NULL),
                                selectInput("race", "Race:",choices=NULL),
                                selectInput("age", "Age:",choices=NULL),
-                               selectInput("geo_level", "Geographic Scale:",choices=NULL),
-                               selectInput("linelocation", "Geographic Area:",choices=NULL),
                                selectInput("year", "Year:",choices=NULL),
                                width = 3
                              ),
@@ -168,7 +165,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                  
                                  tabPanel("Map View", verbatimTextOutput("mapview"),
                                           fluidRow(column(width = 12, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
-                                          fluidRow(column(width = 12, "Use the left panel to filter data,and click on the map for additional details. Please note that data are not currently
+                                          fluidRow(column(width = 12, "Use the left panel to filter data, and click on the map to switch between locations for map data, line trend comparison and profile views.  . Please note that data are not currently
                                                   available for every county in every year, and estimates will change as we process more data.", 
                                                           style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
@@ -198,7 +195,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                           DT::dataTableOutput("mytable")),
                                  tabPanel("Profile View", verbatimTextOutput("locprofview"),
                                           fluidRow(column(width = 12, h3(textOutput("text"),style='text-align:center'))),
-                                          fluidRow(column(width = 12, "Use the left panel to filter 'State','Geographical Scale' and 'Geographic Area' for profile view. Mouse over the plots to see details and click camera icon to download plot.",
+                                          fluidRow(column(width = 12, "Select location on left panel or click location on map to filter profile view. Mouse over the plots to see details and click camera icon to download plot.",
                                                           style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
                                           fluidRow(column(6, div(style = "margin: auto; width: 80%",
@@ -214,7 +211,7 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                  ),
                                  tabPanel("Profile Data", verbatimTextOutput("Profdata"),
                                           fluidRow(column(width = 11, h3(textOutput("demogeotext"),style='text-align:center'))),
-                                          fluidRow(column(width = 11, "Use the left panel to filter 'State','Geographic Scale' and 'Geographic Area' to get profile data.", 
+                                          fluidRow(column(width = 11, "Select location on left panel or click location on map to filter profile data.", 
                                                           style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
                                           radioButtons("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race"),inline = TRUE),
                                           DT::dataTableOutput("profiledata"),
@@ -414,11 +411,7 @@ server <- function(input,output,session) {
       mapdata_merged_sf <- new_merged
     }
     # transfer to spatial dataset
-    mapdata_merged_sf <-st_as_sf(mapdata_merged)
-    pal_fun_num <- colorNumeric("Blues", NULL, n =7)
-    print("for pop up")
-    print(mapdata_merged_sf)
-    #pal_fun_cat <- colorFactor("YlOrRd", NULL, n =7)
+    mapdata_merged_sf <-st_as_sf(mapdata_merged)   
     
     output$descriptiontitle <- renderText({ 
       paste0("")
@@ -468,7 +461,6 @@ server <- function(input,output,session) {
     }
     else if (unique(mapdata_merged_sf$variables) == "Total number of household with internet subscription"){
       total_state = sum(as.numeric(mapdata_merged_sf$value))
-      print(total_state)
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
@@ -482,7 +474,6 @@ server <- function(input,output,session) {
     }
     else if (unique(mapdata_merged_sf$variables) == "Adjusted cohort graduation rate"){
       total_state = sum(as.numeric(mapdata_merged_sf$value))
-      print(total_state)
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
@@ -516,7 +507,6 @@ server <- function(input,output,session) {
     
     else if (unique(mapdata_merged_sf$variables) == "County-level real gdp"){
       total_state = sum(as.numeric(mapdata_merged_sf$value))
-      print(total_state)
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", as.numeric(mapdata_merged_sf$value),"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
@@ -597,13 +587,8 @@ server <- function(input,output,session) {
       pal_fun_num <- colorBin("YlGn", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
     
-    req(input$linelocation)
     req(input$geo_level)
     req(input$line_state)
-    print("Req")
-    print(input$linelocation)
-    print(input$geo_level)
-    print(input$line_state)
     
     if (input$line_state=="Washington"){
       lng = -120.740135
@@ -638,14 +623,15 @@ server <- function(input,output,session) {
     leaflet(mapdata_merged_sf) %>%
       addProviderTiles(provider = "CartoDB") %>%
       addPolygons(
+        layerId = mapdata_merged_sf$geo_name,
         color = "black",
         weight = 1,
         stroke = TRUE, 
         smoothFactor = 1, 
         fillOpacity = 0.55,
         fillColor = ~pal_fun_num(as.numeric(value)), # set fill color with function from above and value
-        popup = p_popup,
-        label = ~lapply(paste0(geo_name, "<br>", unique(mapdata_merged_sf$variables), ": ",round(as.numeric(value),2)),HTML),
+        #popup = p_popup,
+        label = ~lapply(p_popup,HTML),
         highlightOptions = highlightOptions(weight = 2,
                                             color = "white",
                                             fillOpacity = 0.7, 
@@ -658,44 +644,87 @@ server <- function(input,output,session) {
       setView(lng = lng, lat = lat, zoom = zoom)
   })
   
-  output$lineplot <- renderPlot({
-    lineloc<-linelocation()
-    geo_level_data <-geo_level()
-    if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
-      print("lineloc_data after filter")
-      lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
-      names(lineloc)[1] <- 'year'
-      names(lineloc)[2] <- 'variables'
-      names(lineloc)[3] <- 'geo_name'
-      names(lineloc)[4] <- 'value'
-      geo_level_data <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$geo_level,geo_level_data$year,geo_level_data$geo_name), FUN=mean)
-      names(geo_level_data)[1] <- 'geo_level'
-      names(geo_level_data)[2] <- 'year'
-      names(geo_level_data)[3] <- 'geo_name'
-      names(geo_level_data)[4] <- 'value'
-      geo_level_data<-unique(geo_level_data)
-    }
-    
-    US_values <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$year), FUN=mean)
-    names(US_values)[1] <- 'year'
-    names(US_values)[2] <- 'value'
-    
-    
-    plotdata = merge(lineloc[,c("year","variables","value")], US_values[,c("year","value")], by="year")
-    names(plotdata)[3] <- unique(lineloc$geo_name)
-    names(plotdata)[4] <- 'Average'
-    datamelted <- reshape2::melt(plotdata[,c("year", unique(lineloc$geo_name),"Average")], id.var='year')
-    ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) + geom_line()+geom_point(size=2)+
-      ggtitle(paste0(unique(lineloc$variables), " Trend Line Comparison"))
+  observeEvent(linelocation(), {
+    output$lineplot <- renderPlot({
+      lineloc<-linelocation()
+      geo_level_data <-geo_level()
+      if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
+        print("lineloc_data after filter")
+        lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
+        names(lineloc)[1] <- 'year'
+        names(lineloc)[2] <- 'variables'
+        names(lineloc)[3] <- 'geo_name'
+        names(lineloc)[4] <- 'value'
+        geo_level_data <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$geo_level,geo_level_data$year,geo_level_data$geo_name), FUN=mean)
+        names(geo_level_data)[1] <- 'geo_level'
+        names(geo_level_data)[2] <- 'year'
+        names(geo_level_data)[3] <- 'geo_name'
+        names(geo_level_data)[4] <- 'value'
+        geo_level_data<-unique(geo_level_data)
+      }
+      
+      US_values <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$year), FUN=mean)
+      names(US_values)[1] <- 'year'
+      names(US_values)[2] <- 'value'
+      
+      
+      plotdata = merge(lineloc[,c("year","variables","value")], US_values[,c("year","value")], by="year")
+      names(plotdata)[3] <- unique(lineloc$geo_name)
+      names(plotdata)[4] <- 'Average'
+      datamelted <- reshape2::melt(plotdata[,c("year", unique(lineloc$geo_name),"Average")], id.var='year')
+      ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) + geom_line()+geom_point(size=2)+
+        ggtitle(paste0(unique(lineloc$variables), " trend line comparison"))
+    })
   })
+  
+  observeEvent(input$mymap_shape_click, {
+    print("clicked map")
+    p <- input$mymap_shape_click 
+    print(p$id) # click on map, no response
+    if(!is.null(p$id)){
+        linelocation =  filter(line_state(), geo_name == p$id)
+        updateSelectInput(session, "linelocation",choices = sort(unique(line_state()$geo_name)),
+                          selected = p$id)
+    }
+    output$lineplot <- renderPlot({
+      lineloc<-linelocation
+      geo_level_data <-geo_level()
+      if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
+        print("lineloc_data after filter")
+        lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
+        names(lineloc)[1] <- 'year'
+        names(lineloc)[2] <- 'variables'
+        names(lineloc)[3] <- 'geo_name'
+        names(lineloc)[4] <- 'value'
+        geo_level_data <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$geo_level,geo_level_data$year,geo_level_data$geo_name), FUN=mean)
+        names(geo_level_data)[1] <- 'geo_level'
+        names(geo_level_data)[2] <- 'year'
+        names(geo_level_data)[3] <- 'geo_name'
+        names(geo_level_data)[4] <- 'value'
+        geo_level_data<-unique(geo_level_data)
+      }
+      
+      US_values <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$year), FUN=mean)
+      names(US_values)[1] <- 'year'
+      names(US_values)[2] <- 'value'
+      
+      
+      plotdata = merge(lineloc[,c("year","variables","value")], US_values[,c("year","value")], by="year")
+      names(plotdata)[3] <- unique(lineloc$geo_name)
+      names(plotdata)[4] <- 'Average'
+      datamelted <- reshape2::melt(plotdata[,c("year", unique(lineloc$geo_name),"Average")], id.var='year')
+      ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) + geom_line()+geom_point(size=2)+
+        ggtitle(paste0(unique(lineloc$variables), " trend line comparison"))
+    })
+  }) 
   
   
   output$mapdatatitle <- renderText({ 
-    paste0(input$linelocation," Social Weather Index Data Table")
+    paste0(unique(linelocation()$geo_name)," Social Weather Map Data Table")
   })
   
   output$mytable = DT::renderDataTable({
-    x<-year()
+    x <-linelocation()
     names(x)[5] <- 'values'
     names(x)[11] <- 'geo_names'
     names(x)[12] <- 'geo_levels'
