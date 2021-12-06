@@ -134,90 +134,86 @@ test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")]
 
 body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   title = "Social Weather Community Well-Being Dashboard",
-                  tabPanel("Interactive Map",
-                           sidebarLayout(
-                             sidebarPanel(
-                               tags$i(h5("Note: Geographic scale and area might change after selecting map datset", style="color:#045a8d;text-align:left")),
-                               h3("Select Location"),
-                               selectInput("line_state", "State:",choices=c("Washington","Maryland")),
-                               selectInput("geo_level", "Geographic Scale:",choices=NULL),
-                               selectInput("linelocation", "Geographic Area:",choices=NULL),
-                               h3("Select Map Dataset"),
-                               selectInput("domain","Domain:",choices=c("Resources: the tangible assets within a community",
-                                                                        "Connection: social and civic connection within a community",
-                                                                        "Opportunity: individual or household capacity to achieve goals",
-                                                                        "Structural Equity: the fairness of a community's systems and institutions"),selected = NULL),
-                               selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
-                               selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
-                               selectInput("variable_name", "Variable:", choices=NULL,selected = NULL),
-                               selectInput("sex", "Sex:",choices=NULL,selected = NULL),
-                               selectInput("race", "Race:",choices=NULL),
-                               selectInput("age", "Age:",choices=NULL),
-                               selectInput("year", "Year:",choices=NULL),
-                               width = 3
-                             ),
-                             mainPanel(
-                               tags$style(type="text/css",
-                                          ".shiny-output-error { visibility: hidden; }",
-                                          ".shiny-output-error:before { visibility: hidden; }"
-                               ),
-                               tabsetPanel(
-                                 
-                                 tabPanel("Map View", verbatimTextOutput("mapview"),
-                                          fluidRow(column(width = 12, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
-                                          fluidRow(column(width = 12, "Use the left panel to filter data, and click on the map to switch between locations for map data, line trend comparison and profile views.  . Please note that data are not currently
-                                                  available for every county in every year, and estimates will change as we process more data.", 
-                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                          fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
-                                                     background: #48C9B0;
-                                                     border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                        div(class="outer",
-                                                                            fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))),
-                                                                            absolutePanel(id = "controls", class = "panel panel-default",
-                                                                                          top = 245, left = 1400, width = 260, fixed=TRUE,
-                                                                                          draggable = TRUE, height = "auto",
-                                                                                          tags$i(h4(textOutput("descriptiontitle"), style="color:#045a8d;text-align:center")),
-                                                                                          h5(textOutput("datadescription"),style="text-align:left"))),
-                                                                        #fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))), 
-                                                                        fluidRow(column(width = 12, " ", style='padding:3px;')),
-                                                                        plotOutput("lineplot", height = "225px"), 
-                                                                        div(actionButton("twitter_share",
-                                                                                         label = "Share",
-                                                                                         icon = icon("twitter"),
-                                                                                         onclick = sprintf("window.open('%s')", "https://twitter.com/intent/tweet?text=Hello%20world&url=https://shiny.rstudio.com/gallery/widget-gallery.html/"),
-                                                                                         style='padding:6px; font-size:90%'),
-                                                                            style = "display:inline-block; float:right"),
-                                          )))),
-                                 tabPanel("Map Data", verbatimTextOutput("viewdata"),
-                                          fluidRow(column(width = 12, h3(textOutput("mapdatatitle"),style='text-align:center'))),
-                                          fluidRow(column(width = 12, "Use the left panel to filter map data.", 
-                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                          DT::dataTableOutput("mytable")),
-                                 tabPanel("Profile View", verbatimTextOutput("locprofview"),
-                                          fluidRow(column(width = 12, h3(textOutput("text"),style='text-align:center'))),
-                                          fluidRow(column(width = 12, "Select location on left panel or click location on map to filter profile view. Mouse over the plots to see details and click camera icon to download plot.",
-                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                          tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
-                                          fluidRow(column(6, div(style = "margin: auto; width: 80%",
-                                                                 sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
-                                                          plotlyOutput("raceplot")),
-                                                   column(6, div(style = "margin: auto; width: 80%",
-                                                                 sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
-                                                          plotlyOutput("ageplot"))),
-                                          fluidRow(column(6, plotlyOutput("popplot")),
-                                                   column(6, 
-                                                          #h5(textOutput("unavailable"),style='text-align:center;padding:100px;'),
-                                                          plotlyOutput("leplot")))
-                                 ),
-                                 tabPanel("Profile Data", verbatimTextOutput("Profdata"),
-                                          fluidRow(column(width = 11, h3(textOutput("demogeotext"),style='text-align:center'))),
-                                          fluidRow(column(width = 11, "Select location on left panel or click location on map to filter profile data.", 
-                                                          style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                          radioButtons("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race"),inline = TRUE),
-                                          DT::dataTableOutput("profiledata"),
-                                          DT::dataTableOutput("allprofiledata"))
-                                 
-                               ))))
+                  sidebarLayout(
+                     sidebarPanel(
+                       h3("Select Location"),
+                       selectInput("line_state", "State:",choices=c("Washington","Maryland")),
+                       selectInput("geo_level", "Geographic Scale:",choices=NULL),
+                       selectInput("linelocation", "Geographic Area:",choices=NULL),
+                       h3("Select Map Dataset"),
+                       selectInput("domain","Domain:",choices=c("Resources: the tangible assets within a community",
+                                                                "Connection: social and civic connection within a community",
+                                                                "Opportunity: individual or household capacity to achieve goals",
+                                                                "Structural Equity: the fairness of a community's systems and institutions"),selected = NULL),
+                       selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
+                       selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
+                       selectInput("variable_name", "Variable:", choices=NULL,selected = NULL),
+                       selectInput("sex", "Sex:",choices=NULL,selected = NULL),
+                       selectInput("race", "Race:",choices=NULL),
+                       selectInput("age", "Age:",choices=NULL),
+                       selectInput("year", "Year:",choices=NULL),
+                       width = 3
+                     ),
+                     mainPanel(
+                       tags$style(type="text/css",
+                                  ".shiny-output-error { visibility: hidden; }",
+                                  ".shiny-output-error:before { visibility: hidden; }"
+                       ),
+                       tabsetPanel(
+                         
+                         tabPanel("Map View", verbatimTextOutput("mapview"),
+                                  fluidRow(column(width = 12, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
+                                  fluidRow(column(width = 12, "Use the left panel to filter data, and click on the map to switch between locations, trend comparisons, and profile views. Please note that data are not currently available for every county in every year, and estimates may change as we process more data.", 
+                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                  fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
+                                             background: #48C9B0;
+                                             border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
+                                                                div(class="outer",
+                                                                    fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))),
+                                                                    absolutePanel(id = "controls", class = "panel panel-default",
+                                                                                  top = 245, left = 1400, width = 260, fixed=TRUE,
+                                                                                  draggable = TRUE, height = "auto",
+                                                                                  tags$i(h4(textOutput("descriptiontitle"), style="color:#045a8d;text-align:center")),
+                                                                                  h5(textOutput("datadescription"),style="text-align:left"))),
+                                                                fluidRow(column(width = 12, " ", style='padding:3px;')),
+                                                                plotOutput("lineplot", height = "225px"), 
+                                                                div(actionButton("twitter_share",
+                                                                                 label = "Share",
+                                                                                 icon = icon("twitter"),
+                                                                                 onclick = sprintf("window.open('%s')", "https://twitter.com/intent/tweet?text=Hello%20world&url=https://shiny.rstudio.com/gallery/widget-gallery.html/"),
+                                                                                 style='padding:6px; font-size:90%'),
+                                                                    style = "display:inline-block; float:right"),
+                                  )))),
+                         tabPanel("Map Data", verbatimTextOutput("viewdata"),
+                                  fluidRow(column(width = 12, h3(textOutput("mapdatatitle"),style='text-align:center'))),
+                                  fluidRow(column(width = 12, "Use the left panel to filter map data.", 
+                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                  DT::dataTableOutput("mytable")%>% withSpinner(color="#0dc5c1")),
+                         tabPanel("Profile View", verbatimTextOutput("locprofview"),
+                                  fluidRow(column(width = 12, h3(textOutput("text"),style='text-align:center'))),
+                                  fluidRow(column(width = 12, "Select location on left panel or click location on map to filter profile view. Mouse over the plots to see details and click camera icon to download plot.",
+                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                  tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
+                                  fluidRow(column(6, div(style = "margin: auto; width: 80%",
+                                                         sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
+                                                  plotlyOutput("raceplot")),
+                                           column(6, div(style = "margin: auto; width: 80%",
+                                                         sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
+                                                  plotlyOutput("ageplot"))),
+                                  fluidRow(column(6, plotlyOutput("popplot")),
+                                           column(6, 
+                                                  #h5(textOutput("unavailable"),style='text-align:center;padding:100px;'),
+                                                  plotlyOutput("leplot")))
+                         ),
+                         tabPanel("Profile Data", verbatimTextOutput("Profdata"),
+                                  fluidRow(column(width = 11, h3(textOutput("demogeotext"),style='text-align:center'))),
+                                  fluidRow(column(width = 11, "Select location on left panel or click location on map to filter profile data.", 
+                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                  radioButtons("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race"),inline = TRUE),
+                                  DT::dataTableOutput("profiledata")%>% withSpinner(color="#0dc5c1"),
+                                  DT::dataTableOutput("allprofiledata"))
+                         
+                       )))
 )
 
 ############################################### server.R ##################################################
@@ -482,7 +478,8 @@ server <- function(input,output,session) {
       })
       output$datadescription <- renderText({ 
         paste0("Adjusted cohort graduation rate is the number of students who graduate in four years or less with a  regular high school diploma divided by the number of students who form the adjusted-cohort.
-               please click 'Map Data' page for details of graduation rate for each school.")
+               The graduation rate shown on the map is calculated by taking the average of the graduation rates of all schools in each county.
+               Please check 'Map Data' page for details of graduation rate for each school.")
       })
       pal_fun_num <- colorBin("BuPu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
       
@@ -678,52 +675,48 @@ server <- function(input,output,session) {
   })
   
   observeEvent(input$mymap_shape_click, {
+    req(input$year)
+    f_data <- year()
+    f_data$geo_id = substr(f_data$geo_id,3,nchar(f_data$geo_id))
+    names(f_data)[1] <- 'GEOID'
+    mapdata_merged <- dplyr::left_join(f_data,test[,c("GEOID","geometry")], "GEOID", "GEOID")
+    if (unique(mapdata_merged$dataset_id == 4)){
+      new_filtered <- aggregate(as.numeric(value) ~ GEOID, data = mapdata_merged, FUN = mean)
+      names(new_filtered)[1] <- 'GEOID'
+      names(new_filtered)[2] <- 'value'
+      new_merged <- dplyr::inner_join(new_filtered,test[,c("GEOID","geometry")], "GEOID","GEOID")
+      mapdata_merged_sf <- new_merged
+    }
+    # transfer to spatial dataset
+    mapdata_merged_sf <-st_as_sf(mapdata_merged)   
+    
     print("clicked map")
     p <- input$mymap_shape_click 
     print(p$id) # click on map, no response
     if(!is.null(p$id)){
-        linelocation =  filter(line_state(), geo_name == p$id)
+        selectlevel=filter(mapdata_merged_sf,geo_name == p$id)$geo_level
+        updateSelectInput(session, "geo_level",choices = sort(unique(age()$geo_level),decreasing=TRUE),
+                        selected = selectlevel)
+        if (grepl("Washington|WA",p$id)){
+          updateSelectInput(session, "line_state",choices = c("Washington","Maryland"),
+                            selected = "Washington")
+        }
+        else
+          updateSelectInput(session, "line_state",choices = c("Washington","Maryland"),
+                            selected = "Maryland")
         updateSelectInput(session, "linelocation",choices = sort(unique(line_state()$geo_name)),
                           selected = p$id)
     }
-    output$lineplot <- renderPlot({
-      lineloc<-linelocation
-      geo_level_data <-geo_level()
-      if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
-        print("lineloc_data after filter")
-        lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
-        names(lineloc)[1] <- 'year'
-        names(lineloc)[2] <- 'variables'
-        names(lineloc)[3] <- 'geo_name'
-        names(lineloc)[4] <- 'value'
-        geo_level_data <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$geo_level,geo_level_data$year,geo_level_data$geo_name), FUN=mean)
-        names(geo_level_data)[1] <- 'geo_level'
-        names(geo_level_data)[2] <- 'year'
-        names(geo_level_data)[3] <- 'geo_name'
-        names(geo_level_data)[4] <- 'value'
-        geo_level_data<-unique(geo_level_data)
-      }
-      
-      US_values <- aggregate(as.numeric(geo_level_data$value), list(geo_level_data$year), FUN=mean)
-      names(US_values)[1] <- 'year'
-      names(US_values)[2] <- 'value'
-      
-      
-      plotdata = merge(lineloc[,c("year","variables","value")], US_values[,c("year","value")], by="year")
-      names(plotdata)[3] <- unique(lineloc$geo_name)
-      names(plotdata)[4] <- 'Average'
-      datamelted <- reshape2::melt(plotdata[,c("year", unique(lineloc$geo_name),"Average")], id.var='year')
-      ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) + geom_line()+geom_point(size=2)+
-        ggtitle(paste0(unique(lineloc$variables), " trend line comparison"))
-    })
   }) 
   
   
   output$mapdatatitle <- renderText({ 
+    print("mapdatatitle")
     paste0(unique(linelocation()$geo_name)," Social Weather Map Data Table")
   })
   
   output$mytable = DT::renderDataTable({
+    print("mapdatatable")
     x <-linelocation()
     names(x)[5] <- 'values'
     names(x)[11] <- 'geo_names'
@@ -751,6 +744,7 @@ server <- function(input,output,session) {
   
   #######################location profile view########################
   output$text <- renderText({ 
+    print("mapdatatable")
     paste0(input$linelocation," Demographics")
   })
   
@@ -759,7 +753,7 @@ server <- function(input,output,session) {
   })
   
   observeEvent(racedata(),{
-    print("update year slider")
+    print("update race year slider")
     print(racedata())
     choices = sort(unique(racedata()$year))
     print("choices")
@@ -819,7 +813,7 @@ server <- function(input,output,session) {
   })
   
   observeEvent(agedata(),{
-    print("update year slider")
+    print("update age year slider")
     print(agedata())
     choices = sort(unique(agedata()$year))
     print("choices")
@@ -848,10 +842,10 @@ server <- function(input,output,session) {
                      text = paste0(round(as.numeric(agedataset$estimate)/all_age*100,2),"%"), textposition = 'auto',
                      marker = list(color = color_a))
     
-    fig_a <- fig_a %>% layout(title = "Population by Age Group",  showlegend = F,
+    fig_a <- fig_a %>% 
+      layout(title ="Population by Age Group",  showlegend = F,
                               xaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
-                              yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
-                              showlegend = TRUE)
+                              yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
     fig_a
     
     #ageplotly<-ggplot(agedataset, aes(x = label, y =as.numeric(estimate)))+
@@ -891,8 +885,7 @@ server <- function(input,output,session) {
     
     fig_p <- fig_p %>% layout(title = "Population by Year",  showlegend = F,
                               xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
-                              yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
-                              showlegend = TRUE)
+                              yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
     fig_p
     
     #ggplot(popdataset, aes(x=as.factor(year), y = as.numeric(estimate),fill= as.numeric(estimate)))+
@@ -913,13 +906,7 @@ server <- function(input,output,session) {
     ledata<-ledata()
     print("ledata nrow")
     print(ledata)
-    if (nrow(ledata)!=1){
-      output$unavailable <- renderText({ 
-        paste0("Currently no life expectancy data available")
-      })
-    }
-    else{
-      output$leplot <- renderPlotly({
+    output$leplot <- renderPlotly({
         print("poplot")
         ledataset <- ledata()
         print(ledataset)
@@ -929,11 +916,11 @@ server <- function(input,output,session) {
         fig_l <- plot_ly(ledataset, x = ~year,y=ledataset$estimate, type = 'bar',
                          marker = list(color = color_l))
         
-        fig_l <- fig_l %>% layout(title = "Life Expectancy by Year",  showlegend = F,
+        fig_l <- fig_l  %>% 
+          layout(title = "Life Expectancy by Year",  showlegend = F,
                                   xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
-                                  yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
-                                  showlegend = TRUE)
-        fig_l
+                                  yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+      
         
         #ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
         # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
@@ -943,8 +930,9 @@ server <- function(input,output,session) {
         #ggtitle("Bar Chart of Life Expectancy")+
         #theme(panel.background = element_blank())
       })
-    }
   })
+  
+  
   ##############profile data##################
   output$demogeotext <- renderText({ 
     paste0(input$linelocation," Demograhics Data Table")
