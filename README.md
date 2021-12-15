@@ -17,3 +17,5 @@ This is Shiny web application for Social Weather Community Well-Being Dashboard,
   1. For dataset_id = 4, it currently takes average of school graduation rate for each county, the methodology might change later after funders review it.
   2. Line trend comparison plot originally tends to compare with United States data. However, due to lack of US data, we take the averages of location data in each geographic level.
 
+## Question
+For any other questions regarding to dashboard, please contact Ruihan(Bonnie) Bao at ruihab@uw.edu
