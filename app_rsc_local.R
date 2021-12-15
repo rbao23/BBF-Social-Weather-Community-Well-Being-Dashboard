@@ -1,17 +1,15 @@
 #
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
+# This is a Shiny web application for Social Weather Community Well-Being Dashboard. 
+# The App is currently published on rsc.csde.washington.edu and used to integrate into the social weather website
+# Note: this app read tables in local 
 #
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
+# Ruihan(Bonnie) Bao ruihab@uw.edu
+# 2021-12-15
 #
 
-library(profvis)
+############################################# load libraries #############################################
 
-# load libaries
 library(shiny)
-
 library(shinythemes)
 library(dplyr)
 library(RPostgreSQL)
@@ -20,6 +18,7 @@ library(tidyverse)
 library(leaflet)
 library(tigris)
 options(tigris_use_cache = FALSE)
+
 library(sf)
 library(classInt)
 library(shinydashboard)
@@ -27,14 +26,14 @@ library(shinydashboard)
 library(RColorBrewer)
 library(viridis)
 library(ggplot2)
-library(shinycssloaders)
 
 library(DT)
-library("formattable")
-library(ggrepel)
-options(ggrepel.max.overlaps = Inf)
-library(shinyBS)
+library(shinycssloaders)
 library(plotly)
+
+
+############################################# read table #############################################
+
 social_index_dataset=read.csv(file = './dataset/social_index_dataset.csv')
 tbl_age=read.csv(file = './dataset/tbl_age.csv')
 tbl_population=read.csv(file = './dataset/tbl_population.csv')
@@ -50,8 +49,8 @@ tbl_pop_geo = dplyr::left_join(tbl_population,tbl_geography, "geo_id", "geo_id")
 tbl_le_geo = dplyr::left_join(tbl_lifeexpectancy,tbl_geography, "geo_id", "geo_id")
 tbl_race_geo = dplyr::left_join(tbl_race,tbl_geography, "geo_id", "geo_id")
 
-
-# dataframe wrangling
+############################################# Data Wrangling #############################################
+# data wrangling
 social_index_dataset<-social_index_dataset %>% mutate(sex = case_when(startsWith(social_index_dataset$variable,"Female") ~ "Female", 
                                                                       startsWith(social_index_dataset$variable,"Male")   ~ "Male", TRUE ~ "All"))
 # add age column
@@ -86,7 +85,8 @@ social_index_dataset <- social_index_dataset %>%
   mutate(value = case_when(endsWith(social_index_dataset$value,"%") ~substr(social_index_dataset$value,0,nchar(social_index_dataset$value)-1),TRUE ~social_index_dataset$value))
 
 social_index_dataset_copy <- social_index_dataset
-# clean up non numeric values
+
+# clean up non numeric values for dataset_id = 4
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE20']  <- "10"
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='PS']  <- "60"
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE5']  <- "2.5"
@@ -99,6 +99,7 @@ social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_d
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='GE99']  <- "99.5"
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & social_index_dataset$value=='LE1']  <- "0.5"
 
+# take averages of school graduation rate for each county 
 social_index_dataset$value <- apply(social_index_dataset[c("dataset_id", "value")], 1, function(df) {
   if (as.numeric(df["dataset_id"]) == 4 & is.na(as.numeric(df["value"]))) {
     splitted = strsplit(df["value"],"-")
@@ -111,7 +112,7 @@ social_index_dataset$value <- apply(social_index_dataset[c("dataset_id", "value"
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & is.na(as.numeric(social_index_dataset$value))] <- toString((as.numeric(strsplit(social_index_dataset$value,"-")[[1]][2]) + as.numeric(strsplit(social_index_dataset$value,"-")[[1]][1]))/2)
 
 
-##############################shape file##############################
+############################################# shape file #############################################
 # get tract shapefile
 wa_tracts <-tracts(state = "WA", county = c('King', 'Pierce','Yakima'))
 md_tracts <-tracts(state = 'MD', county = c('Baltimore county', 'Baltimore city','Prince George','Montgomery'))
@@ -242,7 +243,6 @@ body <-shinyUI(
 server <- function(input,output,session) {
   domain <- reactive({
     #print("domain changed")
-    #print(input$domain)
     if (input$domain == "Resources: the tangible assets within a community"){
       s_domain = "Resources"
     }
@@ -255,13 +255,11 @@ server <- function(input,output,session) {
     else {
       s_domain="Structural Equity"
     }
-    #print(s_domain)
     filter(social_index_dataset, social_index_dataset$domain==s_domain)
   })
   
   observeEvent(domain(), {
     #print("observe domain change,return subdomain choices")
-    #print("update subdomain choices")
     choice = sort(unique(domain()$subdomain))
     if ("Education Quality" %in% choice){
       new_list<-choice[! choice %in% c("Education Quality")]
@@ -274,125 +272,85 @@ server <- function(input,output,session) {
   subdomain <- reactive({
     #print("subdomain changed")
     req(input$subdomain)
-    #print(input$subdomain)
     filter(domain(), subdomain == input$subdomain)
   })
   
   observeEvent(subdomain(),{
     #print("observe subdomain change,return indicator choices")
-    #print(subdomain())
-    #print(input$subdomain)
-    #print("update indicator choices")
     choices = sort(unique(subdomain()$indicator))
-    #print(choices)
     updateSelectInput(session,"indicator",choices = choices)
-    #print(choices)
   })
   
   indicator <- reactive({
     #print("indicator changed")
     req(input$indicator)
-    #print(input$indicator)
     filter(subdomain(), indicator == input$indicator)
   })
   observeEvent(indicator(),{
-    #req(input$indicator)
     #print("observe indicator change,return variable names choices")
-    #print(input$indicator)
-    #print("update variable name choices")
     choices = sort(unique(indicator()$variables))
     updateSelectInput(session,"variable_name",choices = choices)
-    #print(choices)
   })
   variable_name <- reactive({
     #print("variable_name changed")
     req(input$variable_name)
-    #print(input$variable_name)
     filter(indicator(), variables== input$variable_name)
   })
   observeEvent(variable_name(),{
-    #req(input$variable_name)
     #print("observe variable_name change,return sex choices")
-    #print(input$variable_name)
-    #print("update sex choices")
     choices = sort(unique(variable_name()$sex))
     updateSelectInput(session,"sex",choices = choices)
-    #print(choices)
   })
   
-  ###
   sex <- reactive({
     #print("sex changed")
     req(input$sex)
-    #print(input$sex)
     filter(variable_name(), sex == input$sex)
   })
   observeEvent(sex(), {
-    #req(input$sex)
     #print("observe sex change,return race choices")
-    #print(input$sex)
-    #print("update race choices")
     choices = sort(unique(sex()$race))
     updateSelectInput(session,"race",choices = choices)
-    #print(choices)
   })
   race <- reactive({
     #print("race changed")
     req(input$race)
-    #print(input$race)
     filter(sex(), race == input$race)
   })
   observeEvent(race(),{
-    #req(input$race)
     #print("observe race change,return age choices")
-    #print(input$race)
-    #print("update age choices")
     choices = sort(unique(race()$age))
     updateSelectInput(session,"age",choices = choices)
-    #print(choices)
   })
   age <- reactive({
     #print("age changed")
     req(input$age)
-    #print(input$age)
     filter(race(), age == input$age)
   })
   observeEvent(age(),{
-    #req(input$age)
     #print("observe age change,return geo_level choices")
-    #print(input$age)
-    #print("update geo_level choices")
-    
     choices = sort(unique(age()$geo_level), decreasing=TRUE)
     updateSelectInput(session,"geo_level",choices = choices)
-    #print(choices)
   })
   geo_level <- reactive({
     #print("geo_level changed")
     req(input$geo_level)
-    #print(input$geo_level)
     filter(age(), geo_level == input$geo_level)
   })
   observeEvent({geo_level()},{
-    #req(input$geo_level)
     #print("observe geo_level change,return year choices")
-    #print(input$geo_level)
-    #print("update year choices")
     choices = sort(unique(geo_level()$year))
     updateSelectInput(session,"year",choices = choices)
-    #print(choices)
   })
   
   year <- reactive({
     #print("year changed")
     req(input$year)
-    #print(input$year)
     filter(geo_level(), year == input$year)
   })
   
   line_state <- reactive({
     #print("linestate changed")
-    #print(input$line_state)
     if(input$line_state == "Washington"){
       filter(geo_level(), grepl("Washington|WA",geo_name))
     }
@@ -408,10 +366,10 @@ server <- function(input,output,session) {
   linelocation <- reactive({
     #print("location changed")
     req(input$linelocation)
-    #print(input$linelocation)
     filter(line_state(), geo_name == input$linelocation)
   })
   
+  ############################################# draw map #############################################
   output$mymap <- renderLeaflet({
     #print("observe geo level change, change map")
     req(input$year)
@@ -431,15 +389,13 @@ server <- function(input,output,session) {
       new_merged <- dplyr::inner_join(new_filtered,test[,c("GEOID","geometry")], "GEOID","GEOID")
       mapdata_merged <- new_merged
     }
-    print(mapdata_merged)
-    print(c("before transform", Sys.time()))
+    
     # transfer to spatial dataset
     mapdata_merged_sf <-st_as_sf(mapdata_merged)   
-    print(c("after transform", Sys.time()))
+
     pal_fun_num <- colorBin("Blues", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
   
-    
-    ##################### add pop up for data description #############################
+    ############################################# popup,data description,and map color #############################################
     if (unique(mapdata_merged_sf$variables) == "Percent Voted"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
@@ -634,6 +590,7 @@ server <- function(input,output,session) {
     req(input$geo_level)
     req(input$line_state)
     
+    # set zoom level for different state
     if (input$line_state=="Washington"){
       lng = -120.740135
       lat = 47
@@ -664,6 +621,7 @@ server <- function(input,output,session) {
         zoom = 8.5
       }
     }
+    # draw map
     leaflet(mapdata_merged_sf, options=leafletOptions(preferCanvas = TRUE)) %>%
       addProviderTiles(provider = "CartoDB") %>%
       addPolygons(
@@ -688,12 +646,12 @@ server <- function(input,output,session) {
       setView(lng = lng, lat = lat, zoom = zoom)
   })
   
+  # draw line trend comparison
   observeEvent(linelocation(), {
     output$lineplot <- renderPlot({
       lineloc<-linelocation()
       geo_level_data <-geo_level()
       if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
-        #print("lineloc_data after filter")
         lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
         names(lineloc)[1] <- 'year'
         names(lineloc)[2] <- 'variables'
@@ -716,7 +674,9 @@ server <- function(input,output,session) {
       names(plotdata)[3] <- unique(lineloc$geo_name)
       names(plotdata)[4] <- 'Average'
       datamelted <- reshape2::melt(plotdata[,c("year", unique(lineloc$geo_name),"Average")], id.var='year')
-      ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) + geom_line()+geom_point(size=2)+
+      ggplot(datamelted, aes(x=year, y=as.numeric(value), col=variable,group=variable)) +
+        geom_line(aes(linetype=variable, color=variable))+
+        geom_point(size=2)+
         ggtitle(paste0(unique(lineloc$variables), " trend line comparison"))
     })
   })
@@ -739,7 +699,6 @@ server <- function(input,output,session) {
     
     #print("clicked map")
     p <- input$mymap_shape_click 
-    #print(p$id) # click on map, no response
     if(!is.null(p$id)){
       selectlevel=filter(mapdata_merged_sf,geo_name == p$id)$geo_level
       updateSelectInput(session, "geo_level",choices = sort(unique(age()$geo_level),decreasing=TRUE),
@@ -756,7 +715,7 @@ server <- function(input,output,session) {
     }
   }) 
   
-  
+  ############ Map data ##########
   output$mapdatatitle <- renderText({ 
     #print("mapdatatitle")
     paste0(unique(linelocation()$geo_name)," Social Weather Map Data Table")
@@ -795,22 +754,19 @@ server <- function(input,output,session) {
     paste0(input$linelocation," Demographics")
   })
   
+  ############ race ##########
   racedata <- reactive({
     filter(tbl_race_geo,geo_name == input$linelocation)
   })
   
   observeEvent(racedata(),{
     #print("update race year slider")
-    #print(racedata())
     choices = sort(unique(racedata()$year))
-    #print("choices")
-    #print(choices)
     updateSliderInput(session,'yearperiod', value=range(choices),
                       min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
   })
   yearperiod <- reactive({
     #print("year changed")
-    #print(input$yearperiod)
     filter(filter(racedata(), year == input$yearperiod),label != "estimate_total_population")
   })
   
@@ -818,10 +774,6 @@ server <- function(input,output,session) {
     #print("raceplot")
     racedataset <- yearperiod()
     all_race = sum(as.numeric(racedataset$estimate))
-    # racedataset$fraction = as.numeric(racedataset$estimate)/sum(as.numeric(racedataset$estimate))
-    # racedataset = racedataset[order(racedataset$fraction), ]
-    # racedataset$ymax = cumsum(racedataset$fraction)
-    # racedataset$ymin = c(0, head(racedataset$ymax, n=-1))
     
     
     
@@ -834,43 +786,21 @@ server <- function(input,output,session) {
                           xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
                           yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
     fig
-    #raceplotly<-ggplot(racedataset, aes(fill = factor(label), ymax = ymax, ymin = ymin, xmax = 100, xmin = 80)) +
-    # geom_rect()+
-    #coord_polar(theta = "y")+
-    #xlim(c(20, 100)) +
-    #geom_label_repel(aes(label = paste(round(fraction*100,2),"%"), x = 100,y = (ymin + ymax)/2),inherit.aes = F, show.legend = F, size = 5)+
-    #theme(panel.background = element_rect(fill = "white"),
-    #panel.grid = element_blank(),
-    # axis.text = element_blank(),
-    #axis.title = element_blank(),
-    # axis.ticks = element_blank()) +
-    #scale_fill_viridis(discrete = TRUE)+
-    # labs(fill="Race", 
-    # x=NULL, 
-    # y=NULL, 
-    # title="Ring Plot of Race")
-    
-    # ggplotly(raceplotly)
-    
   })
   
-  ############age
+  ############ age ##########
   agedata <- reactive({
     filter(tbl_age_geo,geo_name == input$linelocation)
   })
   
   observeEvent(agedata(),{
     #print("update age year slider")
-    #print(agedata())
     choices = sort(unique(agedata()$year))
-    #print("choices")
-    #print(choices)
     updateSliderInput(session,'yearperiod2', value=range(choices),
                       min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
   })
   yearperiod2 <- reactive({
     #print("year changed")
-    #print(input$yearperiod2)
     filter(agedata(), year == input$yearperiod2)
   })
   
@@ -880,7 +810,6 @@ server <- function(input,output,session) {
     all_age <- sum(as.numeric(agedataset$estimate))
     
     agedataset$label <- factor(agedataset$label, levels = agedataset$label)
-    #print(agedataset)
     
     color_a = c('rgb(253, 231, 37)', 'rgb(216, 226, 25)', 'rgb(176, 221, 47)','rgb(137, 213, 72)','rgb(101, 203, 94)','rgb(70, 192, 111)','rgb(46, 179, 124)', 'rgb(33, 165, 133)',
                 'rgb(31, 151, 139)', 'rgb(35, 137, 142)', 'rgb(41, 123, 142)','rgb(46, 109, 142)','rgb(53, 94, 141)', 'rgb(61, 78, 138)','rgb(67, 61, 132)', 'rgb(71, 42, 122)',
@@ -894,28 +823,10 @@ server <- function(input,output,session) {
              xaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
              yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
     fig_a
-    
-    #ageplotly<-ggplot(agedataset, aes(x = label, y =as.numeric(estimate)))+
-    #coord_flip() +
-    #scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+theme(legend.position="right")+
-    #geom_bar(position="stack",stat="identity")+
-    #scale_y_continuous(labels = scales::comma) +
-    #xlab("Age Group") +
-    #ylab("Number of People")+
-    #ggtitle("Population by Age")+
-    #geom_col(position = 'dodge') + 
-    #geom_text(
-    #  aes(label=paste0(percentage,"%"), group=1),
-    # position = position_dodge(width = .9),    # move to center of bars
-    #hjust = 0    # nudge above top of bar
-    #)+
-    #theme(panel.background = element_blank())
-    
-    #ggplotly(ageplotly)
   })
   
   
-  ############pop
+  ############ population ##########
   popdata <- reactive({
     filter(tbl_pop_geo,geo_name == input$linelocation)
   })
@@ -923,7 +834,6 @@ server <- function(input,output,session) {
   output$popplot <- renderPlotly({
     #print("poplot")
     popdataset <- popdata()
-    #print(popdataset)
     
     color_p = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
                 'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
@@ -934,29 +844,18 @@ server <- function(input,output,session) {
                               xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
                               yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
     fig_p
-    
-    #ggplot(popdataset, aes(x=as.factor(year), y = as.numeric(estimate),fill= as.numeric(estimate)))+
-    # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
-    #scale_y_continuous(labels = scales::comma) +
-    #xlab("Year") +
-    #ylab("Number of People")+
-    #ggtitle("Bar Chart of Population")+
-    #theme(panel.background = element_blank())
   })
   
-  ############le
+  ############ life expectancy ##########
   ledata <- reactive({
     filter(tbl_le_geo,geo_name == input$linelocation)
   })
   
   observeEvent(ledata(),{
     ledata<-ledata()
-    #print("ledata nrow")
-    ##print(ledata)
+    #print(ledata)
     output$leplot <- renderPlotly({
-      #print("poplot")
       ledataset <- ledata()
-      #print(ledataset)
       
       color_l = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
                   'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
@@ -967,20 +866,11 @@ server <- function(input,output,session) {
         layout(title = "Life Expectancy by Year",  showlegend = F,
                xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
                yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
-      
-      
-      #ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
-      # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
-      #scale_y_continuous(labels = scales::comma) +
-      # xlab("Year") +
-      #ylab("Number of People")+
-      #ggtitle("Bar Chart of Life Expectancy")+
-      #theme(panel.background = element_blank())
     })
   })
   
   
-  ##############profile data##################
+  ############## profile data ##################
   output$demogeotext <- renderText({ 
     paste0(input$linelocation," Demograhics Data Table")
   })
@@ -989,7 +879,6 @@ server <- function(input,output,session) {
     req(input$selectdemo)
     req(input$linelocation)
     #print("select selected demo changed")
-    #print(input$selectdemo)
     if (input$selectdemo=="Age"){
       filter(tbl_age_geo,geo_name == input$linelocation)
     }
@@ -1007,7 +896,6 @@ server <- function(input,output,session) {
   
   observeEvent(selectdemo(),{
     #print("select demo")
-    #print(selectdemo())
     output$profiledata = DT::renderDataTable({
       datatable(selectdemo(),
                 rownames = F,
