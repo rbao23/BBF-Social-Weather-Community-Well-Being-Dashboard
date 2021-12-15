@@ -7,9 +7,11 @@
 #    http://shiny.rstudio.com/
 #
 
+library(profvis)
 
 # load libaries
 library(shiny)
+
 library(shinythemes)
 library(dplyr)
 library(RPostgreSQL)
@@ -17,7 +19,7 @@ library(magrittr)
 library(tidyverse)
 library(leaflet)
 library(tigris)
-options(tigris_use_cache = TRUE)
+options(tigris_use_cache = FALSE)
 library(sf)
 library(classInt)
 library(shinydashboard)
@@ -33,7 +35,6 @@ library(ggrepel)
 options(ggrepel.max.overlaps = Inf)
 library(shinyBS)
 library(plotly)
-
 social_index_dataset=read.csv(file = './dataset/social_index_dataset.csv')
 tbl_age=read.csv(file = './dataset/tbl_age.csv')
 tbl_population=read.csv(file = './dataset/tbl_population.csv')
@@ -110,7 +111,6 @@ social_index_dataset$value <- apply(social_index_dataset[c("dataset_id", "value"
 social_index_dataset$value[social_index_dataset$dataset_id == 4 & is.na(as.numeric(social_index_dataset$value))] <- toString((as.numeric(strsplit(social_index_dataset$value,"-")[[1]][2]) + as.numeric(strsplit(social_index_dataset$value,"-")[[1]][1]))/2)
 
 
-
 ##############################shape file##############################
 # get tract shapefile
 wa_tracts <-tracts(state = "WA", county = c('King', 'Pierce','Yakima'))
@@ -129,91 +129,111 @@ test_area <- bind_rows(test_tracts,test_counties,test_states)
 names(test_zcta)[1] <- 'GEOID'
 test = union(test_area[,c("GEOID","geometry")],test_zcta[,c("GEOID","geometry")])
 
-
 ############################################### ui.R ##################################################
-
-body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
-                  title = "Social Weather Community Well-Being Dashboard",
-                  sidebarLayout(
-                     sidebarPanel(
-                       h3("Select Location"),
-                       selectInput("line_state", "State:",choices=c("Washington","Maryland")),
-                       selectInput("geo_level", "Geographic Scale:",choices=NULL),
-                       selectInput("linelocation", "Geographic Area:",choices=NULL),
-                       h3("Select Map Dataset"),
-                       selectInput("domain","Domain:",choices=c("Resources: the tangible assets within a community",
-                                                                "Connection: social and civic connection within a community",
-                                                                "Opportunity: individual or household capacity to achieve goals",
-                                                                "Structural Equity: the fairness of a community's systems and institutions"),selected = NULL),
-                       selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
-                       selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
-                       selectInput("variable_name", "Variable:", choices=NULL,selected = NULL),
-                       selectInput("sex", "Sex:",choices=NULL,selected = NULL),
-                       selectInput("race", "Race:",choices=NULL),
-                       selectInput("age", "Age:",choices=NULL),
-                       selectInput("year", "Year:",choices=NULL),
-                       width = 3
-                     ),
-                     mainPanel(
-                       tags$style(type="text/css",
-                                  ".shiny-output-error { visibility: hidden; }",
-                                  ".shiny-output-error:before { visibility: hidden; }"
-                       ),
-                       tabsetPanel(
-                         
-                         tabPanel("Map View", verbatimTextOutput("mapview"),
-                                  fluidRow(column(width = 12, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
-                                  fluidRow(column(width = 12, "Use the left panel to filter data, and click on the map to switch between locations, trend comparisons, and profile views. Please note that data are not currently available for every county in every year, and estimates may change as we process more data.", 
-                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                  fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
+body <-shinyUI(
+  tagList(tags$head(tags$style(type = 'text/css','.navbar-brand{display:none;}'),
+                    tags$style( type = 'text/css',
+                                ".selectize-input { word-wrap : break-word;}
+                    .selectize-input { word-break: break-word;}
+                    .selectize-dropdown {word-wrap : break-word;} "
+                    )),
+          fluidPage(theme = shinytheme("flatly"), 
+                    collapsible = TRUE,
+                    "",
+                    sidebarPanel(
+                      h3("Select Location"),
+                      selectInput("line_state", "State:",choices=c("Washington","Maryland")),
+                      selectInput("geo_level", "Geographic Scale:",choices=NULL),
+                      selectInput("linelocation", "Geographic Area:",choices=NULL),
+                      h3("Select Map Dataset"),
+                      selectInput("domain","Domain:",choices=c("Resources: the tangible assets within a community",
+                                                               "Connection: social and civic connection within a community",
+                                                               "Opportunity: individual or household capacity to achieve goals",
+                                                               "Structural Equity: the fairness of a community's systems and institutions"),selected = NULL),
+                      selectInput("subdomain", "Subdomain:", choices=NULL,selected = NULL),
+                      selectInput("indicator", "Indicator:", choices=NULL,selected = NULL),
+                      selectInput("variable_name", "Variable:", choices=NULL,selected = NULL),
+                      selectInput("sex", "Sex:",choices=NULL,selected = NULL),
+                      selectInput("race", "Race:",choices=NULL),
+                      selectInput("age", "Age:",choices=NULL),
+                      selectInput("year", "Year:",choices=NULL),
+                      width = 3
+                    ),
+                    mainPanel(
+                      tags$style(type="text/css",
+                                 ".shiny-output-error { visibility: hidden; }",
+                                 ".shiny-output-error:before { visibility: hidden; }"
+                      ),
+                      tabsetPanel(
+                        tabPanel("Map View", verbatimTextOutput("mapview"),
+                                 fluidRow(column(width = 12, h3("Welcome to the Social Weather Map!",style='text-align:center'))),
+                                 fluidRow(column(width = 12, "Use the left panel to filter data, and click on the map to switch between locations, trend comparisons, and profile views. Please note that data are not currently available for every county in every year, and estimates may change as we process more data.", 
+                                                 style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                 fluidRow(column(12, wellPanel(tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar{
                                              background: #48C9B0;
                                              border-top: 1px solid #48C9B0 ; border-bottom: 1px solid #48C9B0}")),
-                                                                div(class="outer",
-                                                                    fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))),
-                                                                    absolutePanel(id = "controls", class = "panel panel-default",
-                                                                                  top = 245, left = 1400, width = 260, fixed=TRUE,
-                                                                                  draggable = TRUE, height = "auto",
-                                                                                  tags$i(h4(textOutput("descriptiontitle"), style="color:#045a8d;text-align:center")),
-                                                                                  h5(textOutput("datadescription"),style="text-align:left"))),
-                                                                fluidRow(column(width = 12, " ", style='padding:3px;')),
-                                                                plotOutput("lineplot", height = "225px"), 
-                                                                div(actionButton("twitter_share",
-                                                                                 label = "Share",
-                                                                                 icon = icon("twitter"),
-                                                                                 onclick = sprintf("window.open('%s')", "https://twitter.com/intent/tweet?text=Hello%20world&url=https://shiny.rstudio.com/gallery/widget-gallery.html/"),
-                                                                                 style='padding:6px; font-size:90%'),
-                                                                    style = "display:inline-block; float:right"),
-                                  )))),
-                         tabPanel("Map Data", verbatimTextOutput("viewdata"),
-                                  fluidRow(column(width = 12, h3(textOutput("mapdatatitle"),style='text-align:center'))),
-                                  fluidRow(column(width = 12, "Use the left panel to filter map data.", 
-                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                  DT::dataTableOutput("mytable")%>% withSpinner(color="#0dc5c1")),
-                         tabPanel("Profile View", verbatimTextOutput("locprofview"),
-                                  fluidRow(column(width = 12, h3(textOutput("text"),style='text-align:center'))),
-                                  fluidRow(column(width = 12, "Select location on left panel or click location on map to filter profile view. Mouse over the plots to see details and click camera icon to download plot.",
-                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                  tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
-                                  fluidRow(column(6, div(style = "margin: auto; width: 80%",
-                                                         sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
-                                                  plotlyOutput("raceplot")),
-                                           column(6, div(style = "margin: auto; width: 80%",
-                                                         sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
-                                                  plotlyOutput("ageplot"))),
-                                  fluidRow(column(6, plotlyOutput("popplot")),
-                                           column(6, 
-                                                  #h5(textOutput("unavailable"),style='text-align:center;padding:100px;'),
-                                                  plotlyOutput("leplot")))
-                         ),
-                         tabPanel("Profile Data", verbatimTextOutput("Profdata"),
-                                  fluidRow(column(width = 11, h3(textOutput("demogeotext"),style='text-align:center'))),
-                                  fluidRow(column(width = 11, "Select location on left panel or click location on map to filter profile data.", 
-                                                  style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
-                                  radioButtons("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race"),inline = TRUE),
-                                  DT::dataTableOutput("profiledata")%>% withSpinner(color="#0dc5c1"),
-                                  DT::dataTableOutput("allprofiledata"))
-                         
-                       )))
+                                                               div(class="outer",
+                                                                   fluidRow(column(width = 12, div(id = "mymap", leaflet::leafletOutput("mymap", height = "60vh"))%>% withSpinner(color="#0dc5c1"))),
+                                                                   absolutePanel(id = "controls", class = "panel panel-default",
+                                                                                 top = 245, left = 1400, width = 260, fixed=TRUE,
+                                                                                 draggable = TRUE, height = "auto",
+                                                                                 tags$i(h4("Data Description", style="color:#045a8d;text-align:center")),
+                                                                                 h5(textOutput("datadescription"),style="text-align:left"))),
+                                                               fluidRow(column(width = 12, " ", style='padding:3px;')),
+                                                               plotOutput("lineplot", height = "225px"), 
+                                                               div(actionButton("twitter_share",
+                                                                                label = "Twitter",
+                                                                                icon = icon("twitter"),
+                                                                                onclick = sprintf("window.open('%s')", "https://twitter.com/intent/tweet?text=Hello%20world&url=https://shiny.rstudio.com/gallery/widget-gallery.html/"),
+                                                                                style='padding:6px; font-size:90%'),
+                                                                   actionButton(
+                                                                     "facebook_share",
+                                                                     label = "Facebook",
+                                                                     icon = icon("facebook-square"),
+                                                                     onclick = sprintf("window.open('%s')", "https://www.facebook.com//"),
+                                                                     style='padding:6px; font-size:90%'),
+                                                                   actionButton(
+                                                                     "linkedin_share",
+                                                                     label = "LinkedIn",
+                                                                     icon = icon("linkedin"),
+                                                                     onclick = sprintf("window.open('%s')", "https://www.linkedin.com/feed/"),
+                                                                     style='padding:6px; font-size:90%'),
+                                                                   actionButton(
+                                                                     "ins_share",
+                                                                     label = "Instagram",
+                                                                     icon = icon("instagram"),
+                                                                     onclick = sprintf("window.open('%s')", "https://www.instagram.com/"),
+                                                                     style='padding:6px; font-size:90%'),
+                                                                   style = "display:inline-block; float:right")
+                                 )))),
+                        tabPanel("Map Data", verbatimTextOutput("viewdata"),
+                                 fluidRow(column(width = 12, h3(textOutput("mapdatatitle"),style='text-align:center'))),
+                                 fluidRow(column(width = 12, "Use the left panel to filter map data.", 
+                                                 style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                 DT::dataTableOutput("mytable")%>% withSpinner(color="#0dc5c1")),
+                        tabPanel("Profile View", verbatimTextOutput("locprofview"),
+                                 fluidRow(column(width = 12, h3(textOutput("text"),style='text-align:center'))),
+                                 fluidRow(column(width = 12, "Select location on left panel or click location on map to filter profile view. Mouse over the plots to see details and click camera icon to download plot.",
+                                                 style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                 tags$head(tags$style(type='text/css', ".slider-animate-button { font-size: 20pt !important; }")),
+                                 fluidRow(column(6, div(style = "margin: auto; width: 80%",
+                                                        sliderInput("yearperiod", "Race Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
+                                                 plotlyOutput("raceplot")),
+                                          column(6, div(style = "margin: auto; width: 80%",
+                                                        sliderInput("yearperiod2", "Age Year Slider", value =1990, min = 1990, max=2021, sep = "",step=1,animate=TRUE,width = "100%")),
+                                                 plotlyOutput("ageplot"))),
+                                 fluidRow(column(6, plotlyOutput("popplot")),
+                                          column(6,  plotlyOutput("leplot")))
+                        ),
+                        tabPanel("Profile Data", verbatimTextOutput("Profdata"),
+                                 fluidRow(column(width = 11, h3(textOutput("demogeotext"),style='text-align:center'))),
+                                 fluidRow(column(width = 11, "Select location on left panel or click location on map to filter profile data.", 
+                                                 style='font-family:Avenir, Helvetica;font-size:30;text-align:center')),
+                                 radioButtons("selectdemo", "Select demographic:", choices=c("Age","Population","Life Expectancy","Race"),inline = TRUE),
+                                 DT::dataTableOutput("profiledata")%>% withSpinner(color="#0dc5c1"),
+                                 DT::dataTableOutput("allprofiledata"))
+                        
+                      ))))
 )
 
 ############################################### server.R ##################################################
@@ -221,8 +241,8 @@ body <-navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic required to draw a histogram
 server <- function(input,output,session) {
   domain <- reactive({
-    print("domain changed")
-    print(input$domain)
+    #print("domain changed")
+    #print(input$domain)
     if (input$domain == "Resources: the tangible assets within a community"){
       s_domain = "Resources"
     }
@@ -235,144 +255,144 @@ server <- function(input,output,session) {
     else {
       s_domain="Structural Equity"
     }
-    print(s_domain)
+    #print(s_domain)
     filter(social_index_dataset, social_index_dataset$domain==s_domain)
   })
   
   observeEvent(domain(), {
-    print("observe domain change,return subdomain choices")
-    print("update subdomain choices")
+    #print("observe domain change,return subdomain choices")
+    #print("update subdomain choices")
     choice = sort(unique(domain()$subdomain))
     if ("Education Quality" %in% choice){
       new_list<-choice[! choice %in% c("Education Quality")]
       choice = c(c("Education Quality"),new_list)
     }
     updateSelectInput(session=session,"subdomain",choices = choice)
-    print(choice)
+    #print(choice)
   })
   
   subdomain <- reactive({
-    print("subdomain changed")
+    #print("subdomain changed")
     req(input$subdomain)
-    print(input$subdomain)
+    #print(input$subdomain)
     filter(domain(), subdomain == input$subdomain)
   })
   
   observeEvent(subdomain(),{
-    print("observe subdomain change,return indicator choices")
-    print(subdomain())
-    print(input$subdomain)
-    print("update indicator choices")
+    #print("observe subdomain change,return indicator choices")
+    #print(subdomain())
+    #print(input$subdomain)
+    #print("update indicator choices")
     choices = sort(unique(subdomain()$indicator))
-    print(choices)
+    #print(choices)
     updateSelectInput(session,"indicator",choices = choices)
-    print(choices)
+    #print(choices)
   })
   
   indicator <- reactive({
-    print("indicator changed")
+    #print("indicator changed")
     req(input$indicator)
-    print(input$indicator)
+    #print(input$indicator)
     filter(subdomain(), indicator == input$indicator)
   })
   observeEvent(indicator(),{
     #req(input$indicator)
-    print("observe indicator change,return variable names choices")
-    print(input$indicator)
-    print("update variable name choices")
+    #print("observe indicator change,return variable names choices")
+    #print(input$indicator)
+    #print("update variable name choices")
     choices = sort(unique(indicator()$variables))
     updateSelectInput(session,"variable_name",choices = choices)
-    print(choices)
+    #print(choices)
   })
   variable_name <- reactive({
-    print("variable_name changed")
+    #print("variable_name changed")
     req(input$variable_name)
-    print(input$variable_name)
+    #print(input$variable_name)
     filter(indicator(), variables== input$variable_name)
   })
   observeEvent(variable_name(),{
     #req(input$variable_name)
-    print("observe variable_name change,return sex choices")
-    print(input$variable_name)
-    print("update sex choices")
+    #print("observe variable_name change,return sex choices")
+    #print(input$variable_name)
+    #print("update sex choices")
     choices = sort(unique(variable_name()$sex))
     updateSelectInput(session,"sex",choices = choices)
-    print(choices)
+    #print(choices)
   })
   
   ###
   sex <- reactive({
-    print("sex changed")
+    #print("sex changed")
     req(input$sex)
-    print(input$sex)
+    #print(input$sex)
     filter(variable_name(), sex == input$sex)
   })
   observeEvent(sex(), {
     #req(input$sex)
-    print("observe sex change,return race choices")
-    print(input$sex)
-    print("update race choices")
+    #print("observe sex change,return race choices")
+    #print(input$sex)
+    #print("update race choices")
     choices = sort(unique(sex()$race))
     updateSelectInput(session,"race",choices = choices)
-    print(choices)
+    #print(choices)
   })
   race <- reactive({
-    print("race changed")
+    #print("race changed")
     req(input$race)
-    print(input$race)
+    #print(input$race)
     filter(sex(), race == input$race)
   })
   observeEvent(race(),{
     #req(input$race)
-    print("observe race change,return age choices")
-    print(input$race)
-    print("update age choices")
+    #print("observe race change,return age choices")
+    #print(input$race)
+    #print("update age choices")
     choices = sort(unique(race()$age))
     updateSelectInput(session,"age",choices = choices)
-    print(choices)
+    #print(choices)
   })
   age <- reactive({
-    print("age changed")
+    #print("age changed")
     req(input$age)
-    print(input$age)
+    #print(input$age)
     filter(race(), age == input$age)
   })
   observeEvent(age(),{
     #req(input$age)
-    print("observe age change,return geo_level choices")
-    print(input$age)
-    print("update geo_level choices")
+    #print("observe age change,return geo_level choices")
+    #print(input$age)
+    #print("update geo_level choices")
     
     choices = sort(unique(age()$geo_level), decreasing=TRUE)
     updateSelectInput(session,"geo_level",choices = choices)
-    print(choices)
+    #print(choices)
   })
   geo_level <- reactive({
-    print("geo_level changed")
+    #print("geo_level changed")
     req(input$geo_level)
-    print(input$geo_level)
+    #print(input$geo_level)
     filter(age(), geo_level == input$geo_level)
   })
   observeEvent({geo_level()},{
     #req(input$geo_level)
-    print("observe geo_level change,return year choices")
-    print(input$geo_level)
-    print("update year choices")
+    #print("observe geo_level change,return year choices")
+    #print(input$geo_level)
+    #print("update year choices")
     choices = sort(unique(geo_level()$year))
     updateSelectInput(session,"year",choices = choices)
-    print(choices)
+    #print(choices)
   })
   
   year <- reactive({
-    print("year changed")
+    #print("year changed")
     req(input$year)
-    print(input$year)
+    #print(input$year)
     filter(geo_level(), year == input$year)
   })
   
   line_state <- reactive({
-    print("linestate changed")
-    print(input$line_state)
+    #print("linestate changed")
+    #print(input$line_state)
     if(input$line_state == "Washington"){
       filter(geo_level(), grepl("Washington|WA",geo_name))
     }
@@ -386,48 +406,56 @@ server <- function(input,output,session) {
   })
   
   linelocation <- reactive({
-    print("location changed")
+    #print("location changed")
     req(input$linelocation)
-    print(input$linelocation)
+    #print(input$linelocation)
     filter(line_state(), geo_name == input$linelocation)
   })
   
   output$mymap <- renderLeaflet({
-    print("observe geo level change, change map")
+    #print("observe geo level change, change map")
     req(input$year)
+    print(c("before year", Sys.time()))
     f_data <- year()
     f_data$geo_id = substr(f_data$geo_id,3,nchar(f_data$geo_id))
     names(f_data)[1] <- 'GEOID'
+    print(c("before join", Sys.time()))
     mapdata_merged <- dplyr::left_join(f_data,test[,c("GEOID","geometry")], "GEOID", "GEOID")
+    print(c("before aggregate", Sys.time()))
     if (unique(mapdata_merged$dataset_id == 4)){
-      new_filtered <- aggregate(as.numeric(value) ~ GEOID, data = mapdata_merged, FUN = mean)
+      new_filtered <- aggregate(as.numeric(value) ~ GEOID + geo_name + variables , data = mapdata_merged, FUN = mean)
       names(new_filtered)[1] <- 'GEOID'
-      names(new_filtered)[2] <- 'value'
+      names(new_filtered)[2] <- 'geo_name'
+      names(new_filtered)[3] <- 'variables'
+      names(new_filtered)[4] <- 'value'
       new_merged <- dplyr::inner_join(new_filtered,test[,c("GEOID","geometry")], "GEOID","GEOID")
-      mapdata_merged_sf <- new_merged
+      mapdata_merged <- new_merged
     }
+    print(mapdata_merged)
+    print(c("before transform", Sys.time()))
     # transfer to spatial dataset
     mapdata_merged_sf <-st_as_sf(mapdata_merged)   
-    
-    output$descriptiontitle <- renderText({ 
-      paste0("")
-    })
-    output$datadescription <- renderText({ 
-      paste0("")
-    })
+    print(c("after transform", Sys.time()))
     pal_fun_num <- colorBin("Blues", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+  
     
     ##################### add pop up for data description #############################
     if (unique(mapdata_merged_sf$variables) == "Percent Voted"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+      output$datadescription <- renderText({ 
+        paste0("The map depicts reported voting percent data in state-level for the 2020 election")
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Percent of householder living alone"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
       pal_fun_num <- colorBin("GnBu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      output$datadescription <- renderText({ 
+        paste0("The map depicts the rate of people/householder living alone in county level")
+      })
       
     }
     else if (unique(mapdata_merged_sf$variables) == "Percent Insured Estimate"){
@@ -435,23 +463,32 @@ server <- function(input,output,session) {
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
       pal_fun_num <- colorBin("Purples", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      output$datadescription <- renderText({ 
+        paste0("The map depicts percent of health insurance coverage in county level")
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Food insecurity rate"){
       p_popup <- paste0("<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                         "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                         "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%")
       pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      output$datadescription <- renderText({ 
+        paste0("Food insecruity rate is the  number of people who may be food insecure in every U.S. county, Map the Meal Gap uses publicly available state and local data from the U.S. Census Bureau and Bureau of Labor Statistics on factors that research has shown to contribute to food insecurity. 
+               These factors include unemployment and poverty, as well as other demographic and household characteristics. 
+               In addition to measuring how pervasive the need is, the study also estimates the cost of a meal, 
+               and the amount of need among people who are food insecure, using local data from Nielsen and national survey data from the Census Bureau.")
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Metro area cost-burdened households (%)"){
       p_popup <- paste0("<strong> Metro Area: </strong>", mapdata_merged_sf$metro_area,"<br/>",
                         "<strong> Location: </strong>",unique(mapdata_merged_sf$geo_name),"<br/>",
                         "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                         "<strong> Total estimate: </strong>", unique(mapdata_merged_sf$value),"%")
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
       output$datadescription <- renderText({ 
-        paste0("The data we use is Metro area cost-burdened households (%). County in the same metro area share the same data point")
+        paste0("The map depicts Share of households with cost-burdens (percent) in county level. Cost-burdened (severely cost-burdened) households pay more than 30% (more than 50%) of income for housing.
+        Households with zero or negative income are assumed to have severe burdens, while households paying no cash rent are assumed to be without burdens. Monthly housing costs include the contract rent and utilities for renter households. 
+               For homeowners, monthly housing costs include any mortgage payments, property taxes, insurance, utilities, and condominium or mobile home fees.
+               The data we use is Metro area cost-burdened households (%), so county in the same metro area share the same data point")
       })
       pal_fun_num <- colorBin("PuBu", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
     }
@@ -460,22 +497,26 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
-      
+      output$datadescription <- renderText({ 
+        paste0("The map shows the total number of Households with an Internet subscription. It is census data from 2018.")
+      })
       
     }
     else if (unique(mapdata_merged_sf$variables) == "Children aged 3-4 enrolled in school (percent)"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
+      output$datadescription <- renderText({ 
+        paste0("Children aged 3-4 enrolled in school (percent) is 1-year data that depicts the number of children aged 3-4 years enrolled in public or private school divided by the number of children aged 3-4 years, times 100.", sep="\n",
+               "Data available for 2009-2017, except for city neighborhoods (2010-2017), ZIP code tabulation areas (2011-2017), and census tracts (2012 & 2017).",sep="\n",
+               "Sources: American Community Survey 1-Year Summary Files, 2009-2017, Table(s): B14003. American Community Survey 5-Year Summary Files, 2009-2017, Table(s): B14003.")
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Adjusted cohort graduation rate"){
       total_state = sum(as.numeric(mapdata_merged_sf$value))
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
-                        "<strong> Total estimate: </strong>", mapdata_merged_sf$value,"%")
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
+                        "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"%")
       output$datadescription <- renderText({ 
         paste0("Adjusted cohort graduation rate is the number of students who graduate in four years or less with a  regular high school diploma divided by the number of students who form the adjusted-cohort.
                The graduation rate shown on the map is calculated by taking the average of the graduation rates of all schools in each county.
@@ -488,14 +529,11 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", round(as.numeric(mapdata_merged_sf$value),2))
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
       output$datadescription <- renderText({ 
         paste0("The National Risk Index (NRI) is an online tool to help illustrate the nation's communities most at risk of natural hazards. 
         It leverages authoritative nationwide datasets and multiplies values for exposure, hazard frequency, and historic loss ratios to derive
         Expected Annual Loss for 18 natural hazards; and it combines this metric with Social Vulnerability and Community Resilience
-               data to generate a unitless, normalized Risk Index score for every census tract and county in the United States.","<br/>","<br/>",
+               data to generate a unitless, normalized Risk Index score for every census tract and county in the United States.",sep="\n",
                "The NRI incorporates data for the following natural hazards: Avalanche, Coastal Flooding, Cold Wave, Drought, Earthquake, Hail, Heat Wave,
                Hurricane, Ice Storm, Landslide, Lightning, Riverine Flooding, Strong Wind, Tornado, Tsunami, Volcanic Activity, Wildfire, and Winter Weather.")
       })
@@ -507,21 +545,29 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", as.numeric(mapdata_merged_sf$value),"(",round(as.numeric(mapdata_merged_sf$value)/total_state*100,2),"%)")
+      output$datadescription <- renderText({ 
+        paste0("County level real gdp is a comprehensive measure of the economies of counties. 
+               Gross domestic product estimates the value of the goods and services produced in an area. 
+               It can be used to compare the size and growth of county economies across the nation.")
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Gdp percent change from preceding period"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", as.numeric(mapdata_merged_sf$value),"%")
+      output$datadescription <- renderText({ 
+        paste0("Gdp percent change from preceding period is the percent of real Gdp changes from preceding year. 
+        Real gdp is a comprehensive measure of the economies of counties, metropolitan statistical areas, and some other local areas. 
+        Gross domestic product estimates the value of the goods and services produced in an area. 
+               It can be used to compare the size and growth of county economies across the nation.")
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Hudper100"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2))
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
       output$datadescription <- renderText({ 
-        paste0("Hudper100 is HUD units per 100 ELI renters (=(HUD/Total)*100)")
+        paste0("Hudper100 is U.S. Department of Agriculture (HUD) assisted units per 100 extremely low-income (ELI) renter households at the county level in the United States (=(HUD/Total)*100)")
       })
       
     }
@@ -530,11 +576,8 @@ server <- function(input,output,session) {
                         "<strong> Social Weather Index: </strong>","USDAper100","<br/>",
                         "<strong> Total estimate: </strong>",round(as.numeric(mapdata_merged_sf$value),2),"<br/>",
                         "<strong> Data Description: </strong>","USDAper100 is USDA units per 100 ELI renters (=(USDA/Total)*100)")
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
       output$datadescription <- renderText({ 
-        paste0("USDAper100 is USDA units per 100 ELI renters (=(USDA/Total)*100)")
+        paste0("USDAper100 is U.S. Department of Agriculture (USDA) assisted units per 100 extremely low-income (ELI) renter households at the county level in the United States (=(USDA/Total)*100)")
       })
       
     }
@@ -542,11 +585,8 @@ server <- function(input,output,session) {
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value)
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
       output$datadescription <- renderText({ 
-        paste0("The Native Analysis Value is emergency department visit rate per 1000 beneficiaries")
+        paste0("The Native Analysis Value is emergency department visit rate per 1,000 beneficiaries")
       })
       
       pal_fun_num <- colorBin("Purples", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
@@ -554,18 +594,18 @@ server <- function(input,output,session) {
     }
     else if (unique(mapdata_merged_sf$variables) == "Jail Population Rate" | unique(mapdata_merged_sf$variables) == "Prison Population Rate"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
-                        "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
+                        "<strong> Social Weather Index: </strong>",unique(mapdata_merged_sf$variables),"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value," per 100,000 residents age 15-64")
       pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
-      
+      output$datadescription <- renderText({ 
+        paste0("The map depicts ", unique(mapdata_merged_sf$variables), " Per 100,000 residents age 15-64. Annual demographic data for county
+               resident population from the U.S Census Bureau are used in combination with the Jail and Prison popluation to calculate ", unique(mapdata_merged_sf$variables))
+      })
     }
     else if (unique(mapdata_merged_sf$variables) == "Top-to-bottom ratio"){
       p_popup <- paste0("<strong> Location: </strong>",mapdata_merged_sf$geo_name,"<br/>",
                         "<strong> Social Weather Index: </strong>",mapdata_merged_sf$variables,"<br/>",
                         "<strong> Total estimate: </strong>", mapdata_merged_sf$value)
-      output$descriptiontitle <- renderText({ 
-        paste0("Data Description")
-      })
       output$datadescription <- renderText({ 
         paste0("Ratio of top 1% income to bottom 99% income for all U.S. counties")
       })
@@ -579,9 +619,16 @@ server <- function(input,output,session) {
     }
     if (unique(mapdata_merged_sf$variables) == "Violent crimes per 100,000"){
       pal_fun_num <- colorBin("YlOrRd", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      output$datadescription <- renderText({ 
+        paste0("The map depicts violent crime rate per 100,000 population in county level.")
+      })
     }  
     else if (unique(mapdata_merged_sf$variables) == "Median air quality"){
       pal_fun_num <- colorBin("YlGn", domain =as.numeric(mapdata_merged_sf$value), bins = 7)
+      output$datadescription <- renderText({ 
+        paste0("The map depicts daily median AQI by County for 1980-2021. 
+        The Air Quality Index (AQI) values is calculated each day for each monitor for the Criteria Gases and PM10 and PM2.5 (FRM and non FRM).")
+      })
     }
     
     req(input$geo_level)
@@ -617,7 +664,7 @@ server <- function(input,output,session) {
         zoom = 8.5
       }
     }
-    leaflet(mapdata_merged_sf) %>%
+    leaflet(mapdata_merged_sf, options=leafletOptions(preferCanvas = TRUE)) %>%
       addProviderTiles(provider = "CartoDB") %>%
       addPolygons(
         layerId = mapdata_merged_sf$geo_name,
@@ -646,7 +693,7 @@ server <- function(input,output,session) {
       lineloc<-linelocation()
       geo_level_data <-geo_level()
       if (unique(geo_level_data$variables) == "Adjusted cohort graduation rate"){
-        print("lineloc_data after filter")
+        #print("lineloc_data after filter")
         lineloc <- aggregate(as.numeric(lineloc$value), list(lineloc$year,lineloc$variables,lineloc$geo_name),FUN = mean)
         names(lineloc)[1] <- 'year'
         names(lineloc)[2] <- 'variables'
@@ -690,33 +737,33 @@ server <- function(input,output,session) {
     # transfer to spatial dataset
     mapdata_merged_sf <-st_as_sf(mapdata_merged)   
     
-    print("clicked map")
+    #print("clicked map")
     p <- input$mymap_shape_click 
-    print(p$id) # click on map, no response
+    #print(p$id) # click on map, no response
     if(!is.null(p$id)){
-        selectlevel=filter(mapdata_merged_sf,geo_name == p$id)$geo_level
-        updateSelectInput(session, "geo_level",choices = sort(unique(age()$geo_level),decreasing=TRUE),
+      selectlevel=filter(mapdata_merged_sf,geo_name == p$id)$geo_level
+      updateSelectInput(session, "geo_level",choices = sort(unique(age()$geo_level),decreasing=TRUE),
                         selected = selectlevel)
-        if (grepl("Washington|WA",p$id)){
-          updateSelectInput(session, "line_state",choices = c("Washington","Maryland"),
-                            selected = "Washington")
-        }
-        else
-          updateSelectInput(session, "line_state",choices = c("Washington","Maryland"),
-                            selected = "Maryland")
-        updateSelectInput(session, "linelocation",choices = sort(unique(line_state()$geo_name)),
-                          selected = p$id)
+      if (grepl("Washington|WA",p$id)){
+        updateSelectInput(session, "line_state",choices = c("Washington","Maryland"),
+                          selected = "Washington")
+      }
+      else
+        updateSelectInput(session, "line_state",choices = c("Washington","Maryland"),
+                          selected = "Maryland")
+      updateSelectInput(session, "linelocation",choices = sort(unique(line_state()$geo_name)),
+                        selected = p$id)
     }
   }) 
   
   
   output$mapdatatitle <- renderText({ 
-    print("mapdatatitle")
+    #print("mapdatatitle")
     paste0(unique(linelocation()$geo_name)," Social Weather Map Data Table")
   })
   
   output$mytable = DT::renderDataTable({
-    print("mapdatatable")
+    #print("mapdatatable")
     x <-linelocation()
     names(x)[5] <- 'values'
     names(x)[11] <- 'geo_names'
@@ -744,7 +791,7 @@ server <- function(input,output,session) {
   
   #######################location profile view########################
   output$text <- renderText({ 
-    print("mapdatatable")
+    #print("mapdatatable")
     paste0(input$linelocation," Demographics")
   })
   
@@ -753,29 +800,29 @@ server <- function(input,output,session) {
   })
   
   observeEvent(racedata(),{
-    print("update race year slider")
-    print(racedata())
+    #print("update race year slider")
+    #print(racedata())
     choices = sort(unique(racedata()$year))
-    print("choices")
-    print(choices)
+    #print("choices")
+    #print(choices)
     updateSliderInput(session,'yearperiod', value=range(choices),
                       min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
   })
   yearperiod <- reactive({
-    print("year changed")
-    print(input$yearperiod)
+    #print("year changed")
+    #print(input$yearperiod)
     filter(filter(racedata(), year == input$yearperiod),label != "estimate_total_population")
   })
   
   output$raceplot <- renderPlotly({
-    print("raceplot")
+    #print("raceplot")
     racedataset <- yearperiod()
     all_race = sum(as.numeric(racedataset$estimate))
     # racedataset$fraction = as.numeric(racedataset$estimate)/sum(as.numeric(racedataset$estimate))
     # racedataset = racedataset[order(racedataset$fraction), ]
     # racedataset$ymax = cumsum(racedataset$fraction)
     # racedataset$ymin = c(0, head(racedataset$ymax, n=-1))
-  
+    
     
     
     color_r = c('rgb(253, 231, 37)','rgb(160, 218, 57)','rgb(74, 193, 109)',' rgb(31, 161, 135)','rgb(39, 127, 142)', 'rgb(54, 92, 141)', 'rgb(70, 50, 126)','rgb(68, 1, 84)')
@@ -813,27 +860,27 @@ server <- function(input,output,session) {
   })
   
   observeEvent(agedata(),{
-    print("update age year slider")
-    print(agedata())
+    #print("update age year slider")
+    #print(agedata())
     choices = sort(unique(agedata()$year))
-    print("choices")
-    print(choices)
+    #print("choices")
+    #print(choices)
     updateSliderInput(session,'yearperiod2', value=range(choices),
                       min = min(as.numeric(choices)), max = max(as.numeric(choices)), step = 1)
   })
   yearperiod2 <- reactive({
-    print("year changed")
-    print(input$yearperiod2)
+    #print("year changed")
+    #print(input$yearperiod2)
     filter(agedata(), year == input$yearperiod2)
   })
   
   output$ageplot <- renderPlotly({
-    print("ageplot")
+    #print("ageplot")
     agedataset <- yearperiod2()
     all_age <- sum(as.numeric(agedataset$estimate))
     
     agedataset$label <- factor(agedataset$label, levels = agedataset$label)
-    print(agedataset)
+    #print(agedataset)
     
     color_a = c('rgb(253, 231, 37)', 'rgb(216, 226, 25)', 'rgb(176, 221, 47)','rgb(137, 213, 72)','rgb(101, 203, 94)','rgb(70, 192, 111)','rgb(46, 179, 124)', 'rgb(33, 165, 133)',
                 'rgb(31, 151, 139)', 'rgb(35, 137, 142)', 'rgb(41, 123, 142)','rgb(46, 109, 142)','rgb(53, 94, 141)', 'rgb(61, 78, 138)','rgb(67, 61, 132)', 'rgb(71, 42, 122)',
@@ -844,23 +891,23 @@ server <- function(input,output,session) {
     
     fig_a <- fig_a %>% 
       layout(title ="Population by Age Group",  showlegend = F,
-                              xaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
-                              yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+             xaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+             yaxis = list(title = "Age Group",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
     fig_a
     
     #ageplotly<-ggplot(agedataset, aes(x = label, y =as.numeric(estimate)))+
-     #coord_flip() +
-     #scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+theme(legend.position="right")+
-     #geom_bar(position="stack",stat="identity")+
-     #scale_y_continuous(labels = scales::comma) +
-     #xlab("Age Group") +
-     #ylab("Number of People")+
-     #ggtitle("Population by Age")+
-     #geom_col(position = 'dodge') + 
-     #geom_text(
+    #coord_flip() +
+    #scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+theme(legend.position="right")+
+    #geom_bar(position="stack",stat="identity")+
+    #scale_y_continuous(labels = scales::comma) +
+    #xlab("Age Group") +
+    #ylab("Number of People")+
+    #ggtitle("Population by Age")+
+    #geom_col(position = 'dodge') + 
+    #geom_text(
     #  aes(label=paste0(percentage,"%"), group=1),
-     # position = position_dodge(width = .9),    # move to center of bars
-      #hjust = 0    # nudge above top of bar
+    # position = position_dodge(width = .9),    # move to center of bars
+    #hjust = 0    # nudge above top of bar
     #)+
     #theme(panel.background = element_blank())
     
@@ -874,9 +921,9 @@ server <- function(input,output,session) {
   })
   
   output$popplot <- renderPlotly({
-    print("poplot")
+    #print("poplot")
     popdataset <- popdata()
-    print(popdataset)
+    #print(popdataset)
     
     color_p = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
                 'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
@@ -904,32 +951,32 @@ server <- function(input,output,session) {
   
   observeEvent(ledata(),{
     ledata<-ledata()
-    print("ledata nrow")
-    print(ledata)
+    #print("ledata nrow")
+    ##print(ledata)
     output$leplot <- renderPlotly({
-        print("poplot")
-        ledataset <- ledata()
-        print(ledataset)
-        
-        color_l = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
-                    'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
-        fig_l <- plot_ly(ledataset, x = ~year,y=ledataset$estimate, type = 'bar',
-                         marker = list(color = color_l))
-        
-        fig_l <- fig_l  %>% 
-          layout(title = "Life Expectancy by Year",  showlegend = F,
-                                  xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
-                                  yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+      #print("poplot")
+      ledataset <- ledata()
+      #print(ledataset)
       
-        
-        #ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
-        # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
-        #scale_y_continuous(labels = scales::comma) +
-        # xlab("Year") +
-        #ylab("Number of People")+
-        #ggtitle("Bar Chart of Life Expectancy")+
-        #theme(panel.background = element_blank())
-      })
+      color_l = c("rgb(253, 231, 37)"," rgb(181, 222, 43)", "rgb(110, 206, 88)", "rgb(53, 183, 121)","rgb(31, 158, 137)",' rgb(38, 130, 142)',
+                  'rgb(49, 104, 142)', 'rgb(62, 73, 137)','rgb(72, 40, 120)', 'rgb(68, 1, 84)')
+      fig_l <- plot_ly(ledataset, x = ~year,y=ledataset$estimate, type = 'bar',
+                       marker = list(color = color_l))
+      
+      fig_l <- fig_l  %>% 
+        layout(title = "Life Expectancy by Year",  showlegend = F,
+               xaxis = list(type = 'category', title = "Year",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE,tickmode = 'linear'),
+               yaxis = list(title = "Population",showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+      
+      
+      #ggplot(ledataset, aes(x=year, y = as.numeric(estimate),fill= as.numeric(estimate)))+
+      # geom_bar(stat="identity")+scale_fill_continuous(type = "viridis",name = "Number of People",labels = scales::comma)+
+      #scale_y_continuous(labels = scales::comma) +
+      # xlab("Year") +
+      #ylab("Number of People")+
+      #ggtitle("Bar Chart of Life Expectancy")+
+      #theme(panel.background = element_blank())
+    })
   })
   
   
@@ -941,8 +988,8 @@ server <- function(input,output,session) {
   selectdemo <- reactive({
     req(input$selectdemo)
     req(input$linelocation)
-    print("select selected demo changed")
-    print(input$selectdemo)
+    #print("select selected demo changed")
+    #print(input$selectdemo)
     if (input$selectdemo=="Age"){
       filter(tbl_age_geo,geo_name == input$linelocation)
     }
@@ -959,8 +1006,8 @@ server <- function(input,output,session) {
   })
   
   observeEvent(selectdemo(),{
-    print("select demo")
-    print(selectdemo())
+    #print("select demo")
+    #print(selectdemo())
     output$profiledata = DT::renderDataTable({
       datatable(selectdemo(),
                 rownames = F,
